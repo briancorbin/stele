@@ -57,6 +57,9 @@ jobs:
     name: publish to npm
     needs: build
     runs-on: ubuntu-latest
+    # Pulls NPM_TOKEN from the `release` environment, whose deployment rule allows
+    # the `v*` tag pattern (a tag ref does not satisfy a branch-only restriction).
+    environment: release
     steps:
       - uses: actions/checkout@v4
 
