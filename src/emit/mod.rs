@@ -17,3 +17,16 @@ pub fn emitter_for(lang: &str) -> Option<Box<dyn Emitter>> {
         _ => None,
     }
 }
+
+/// Single-character encoding for a plural category, used to pack the baked
+/// per-locale tables compactly into generated code.
+pub fn cat_char(name: &str) -> char {
+    match name {
+        "zero" => 'z',
+        "one" => '1',
+        "two" => '2',
+        "few" => 'f',
+        "many" => 'm',
+        _ => 'o',
+    }
+}

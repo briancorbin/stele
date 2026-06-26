@@ -116,11 +116,14 @@ Early, but real. Both emitters are verified end-to-end: the generated code compi
 - [x] JSON → serializable IR
 - [x] TypeScript emitter (nested typed accessors, zero-runtime)
 - [x] Swift emitter (idiomatic labeled args, nested structs)
-- [x] Plural handling via baked tables (Hermes-safe)
-- [ ] **ICU4X** for authoritative CLDR plural rules (`few`/`many`/`two` languages)
+- [x] **ICU4X**-backed plurals — authoritative CLDR rules baked into per-locale
+      tables at generate time, validated against the oracle, emitted as pure
+      lookups (correct `one`/`few`/`many` for Polish, Arabic, Russian, …; no
+      runtime `Intl.PluralRules`, so it's Hermes-safe)
 - [ ] More emitters (Kotlin, Go, Rust, Java)
 - [ ] Distribution: native binary via npm / brew / cargo
 - [ ] `$select` (gender / arbitrary branching)
+- [ ] Validate `$plural` coverage against each locale's CLDR category set
 
 ## License
 

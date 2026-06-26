@@ -12,6 +12,18 @@ pub struct Ir {
     pub canonical: String,
     pub locales: Vec<String>,
     pub messages: Vec<Message>,
+    /// Per-locale baked plural-category tables, resolved from CLDR via ICU4X.
+    pub plural_rules: BTreeMap<String, PluralTable>,
+}
+
+/// A baked plural-category lookup for one locale. `small[n]` covers n in 0..100;
+/// `modulo[n % 100]` covers n >= 100. `categories` is the set of categories the
+/// locale actually uses (from CLDR), useful for validating `$plural` coverage.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PluralTable {
+    pub categories: Vec<String>,
+    pub small: Vec<String>,
+    pub modulo: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -64,10 +76,17 @@ pub fn build_ir(canonical: &str, locales: &BTreeMap<String, Value>) -> Result<Ir
     let mut messages = Vec::new();
     let mut path = Vec::new();
     walk(canon, &mut path, locales, canonical, &placeholder, &mut messages)?;
+
+    let mut plural_rules = BTreeMap::new();
+    for loc in locales.keys() {
+        plural_rules.insert(loc.clone(), crate::plural::build_plural_table(loc)?);
+    }
+
     Ok(Ir {
         canonical: canonical.to_string(),
         locales: locales.keys().cloned().collect(),
         messages,
+        plural_rules,
     })
 }
 

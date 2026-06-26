@@ -2,6 +2,7 @@ mod config;
 mod emit;
 mod ir;
 mod model;
+mod plural;
 
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};

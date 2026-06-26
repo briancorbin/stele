@@ -3,6 +3,11 @@ name = "stelegen"
 version = "0.0.1"
 edition = "2021"
 description = "JSON-first, type-safe i18n codegen with pluggable per-language emitters"
+license = "MIT"
+repository = "https://github.com/briancorbin/stele"
+readme = "README.md"
+keywords = ["i18n", "codegen", "localization", "typescript", "swift"]
+categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
 name = "stele"
@@ -11,6 +16,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+icu = "2.2.0"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

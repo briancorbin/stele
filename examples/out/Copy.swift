@@ -5,6 +5,7 @@ import Foundation
 public enum Locale: String {
     case en
     case es
+    case pl
 }
 
 public struct Copy {
@@ -60,6 +61,12 @@ enum SteleData {
             "walk.cta.confirm": "Mantén pulsado para pasear a {dogName}",
             "walk.cta.start": "Empezar paseo",
         ],
+        "pl": [
+            "home.greeting": "Cześć {name}, w pobliżu są psy",
+            "home.title": "Sidewalk",
+            "walk.cta.confirm": "Przytrzymaj, aby potwierdzić spacer z {dogName}",
+            "walk.cta.start": "Rozpocznij spacer",
+        ],
     ]
     static let PLURALS: [String: [String: [String: String]]] = [
         "en": [
@@ -70,12 +77,37 @@ enum SteleData {
             "home.nearby": ["one": "{count} perro a {radius} de ti", "other": "{count} perros a {radius} de ti"],
             "inbox.unread": ["one": "{count} mensaje sin leer", "other": "{count} mensajes sin leer"],
         ],
+        "pl": [
+            "home.nearby": ["few": "{count} psy w odległości {radius} od Ciebie", "many": "{count} psów w odległości {radius} od Ciebie", "one": "{count} pies w odległości {radius} od Ciebie", "other": "{count} psa w odległości {radius} od Ciebie"],
+            "inbox.unread": ["few": "{count} nieprzeczytane wiadomości", "many": "{count} nieprzeczytanych wiadomości", "one": "{count} nieprzeczytana wiadomość", "other": "{count} nieprzeczytanej wiadomości"],
+        ],
     ]
-    static func pluralCategory(_ l: Locale, _ n: Int) -> String {
-        switch l {
-        case .en: return n == 1 ? "one" : "other"
-        case .es: return n == 1 ? "one" : "other"
+    static let PCAT_SMALL: [String: String] = [
+        "en": "o1oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo",
+        "es": "o1oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo",
+        "pl": "m1fffmmmmmmmmmmmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmm",
+    ]
+    static let PCAT_MOD: [String: String] = [
+        "en": "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo",
+        "es": "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo",
+        "pl": "mmfffmmmmmmmmmmmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmm",
+    ]
+    static func pcode(_ c: Character) -> String {
+        switch c {
+        case "z": return "zero"
+        case "1": return "one"
+        case "2": return "two"
+        case "f": return "few"
+        case "m": return "many"
+        default: return "other"
         }
+    }
+    static func pluralCategory(_ l: Locale, _ n: Int) -> String {
+        let i = abs(n)
+        let table = i < 100 ? (PCAT_SMALL[l.rawValue] ?? "") : (PCAT_MOD[l.rawValue] ?? "")
+        let chars = Array(table)
+        let idx = i < 100 ? i : i % 100
+        return idx < chars.count ? pcode(chars[idx]) : "other"
     }
     static func s(_ l: Locale, _ k: String) -> String {
         STRINGS[l.rawValue]?[k] ?? k
