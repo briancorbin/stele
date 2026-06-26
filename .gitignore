@@ -1,0 +1,9 @@
+# Rust build output
+/target
+
+# Swift example build artifacts
+examples/out/*.o
+examples/out/stele_demo
+
+# macOS
+.DS_Store

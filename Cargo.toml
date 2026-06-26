@@ -1,0 +1,17 @@
+[package]
+name = "stelegen"
+version = "0.0.1"
+edition = "2021"
+description = "JSON-first, type-safe i18n codegen with pluggable per-language emitters"
+
+[[bin]]
+name = "stele"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"

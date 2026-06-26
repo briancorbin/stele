@@ -1,0 +1,10 @@
+canonical = "en"
+locales = "examples/locales"
+
+[[target]]
+lang = "typescript"
+out = "examples/out/copy.gen.ts"
+
+[[target]]
+lang = "swift"
+out = "examples/out/Copy.swift"
