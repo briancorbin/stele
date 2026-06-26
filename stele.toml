@@ -8,3 +8,8 @@ out = "examples/out/copy.gen.ts"
 [[target]]
 lang = "swift"
 out = "examples/out/Copy.swift"
+
+[[target]]
+lang = "react"
+out = "examples/out/copy.react.ts"
+core = "./copy.gen"

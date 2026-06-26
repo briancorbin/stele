@@ -18,4 +18,7 @@ pub struct Target {
     /// callable (e.g. `copy.home.title()`). TypeScript only.
     #[serde(default)]
     pub callable: bool,
+    /// For the `react` target: the import specifier to the core generated module
+    /// (the `typescript` target's output). Defaults to `./copy.gen`.
+    pub core: Option<String>,
 }

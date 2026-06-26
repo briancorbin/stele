@@ -1,5 +1,6 @@
 use crate::ir::Ir;
 
+pub mod react;
 pub mod swift;
 pub mod ts;
 
@@ -11,17 +12,22 @@ pub trait Emitter {
 }
 
 /// Per-target emitter options, threaded from `stele.toml`.
-#[derive(Default, Clone, Copy)]
+#[derive(Clone)]
 pub struct EmitOptions {
     pub callable: bool,
+    /// Import specifier to the core module (used by the `react` target).
+    pub core: String,
 }
 
-pub fn emitter_for(lang: &str, opts: EmitOptions) -> Option<Box<dyn Emitter>> {
+pub fn emitter_for(lang: &str, opts: &EmitOptions) -> Option<Box<dyn Emitter>> {
     match lang {
         "typescript" | "ts" => Some(Box::new(ts::TsEmitter {
             callable: opts.callable,
         })),
         "swift" => Some(Box::new(swift::SwiftEmitter)),
+        "react" => Some(Box::new(react::ReactEmitter {
+            core: opts.core.clone(),
+        })),
         _ => None,
     }
 }

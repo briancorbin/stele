@@ -153,6 +153,36 @@ A CI check keeps generated output honest: `stele generate && git diff --exit-cod
 
 A worked example — input, config, and generated output for both languages — lives in [`examples/`](examples/).
 
+### React / React Native
+
+The core output stays zero-runtime and framework-agnostic. Add a `react` target
+to *also* emit reactive bindings — a tiny generated file that wraps the core in a
+Context, so changing the locale re-renders every `useCopy()` consumer. Works the
+same on web React and React Native (it's `createElement` + hooks, no JSX build).
+
+```toml
+[[target]]
+lang = "typescript"
+out  = "src/copy.gen.ts"
+
+[[target]]
+lang = "react"
+out  = "src/copy.react.ts"
+core = "./copy.gen"          # import path to the typescript target's output
+```
+
+```tsx
+import { CopyProvider, useCopy, useLocale } from "./copy.react";
+
+// at the root:
+<CopyProvider locale="en"><App /></CopyProvider>;
+
+// in a component — re-renders when the locale changes:
+const copy = useCopy();
+const [locale, setLocale] = useLocale();
+return <Text onPress={() => setLocale("es")}>{copy.home.greeting({ name })}</Text>;
+```
+
 ## Status
 
 Early, but real. Both emitters are verified end-to-end: the generated code compiles, runs, and rejects bad calls at compile time.
@@ -166,6 +196,9 @@ Early, but real. Both emitters are verified end-to-end: the generated code compi
       runtime `Intl.PluralRules`, so it's Hermes-safe)
 - [x] Distribution — native binary via npm (`@stelegen/cli`) and crates.io (`stelegen`),
       cross-compiled for macOS/Linux/Windows by CI on each tag
+- [x] Multi-file / folder locales (path-as-namespace, deep-merged)
+- [x] React / React Native bindings (`react` target) — reactive `useCopy` /
+      `useLocale` / `CopyProvider`, locale change re-renders consumers
 - [ ] More emitters (Kotlin, Go, Rust, Java)
 - [ ] `$select` (gender / arbitrary branching)
 - [ ] Validate `$plural` coverage against each locale's CLDR category set

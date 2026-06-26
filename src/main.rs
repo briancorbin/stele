@@ -50,8 +50,12 @@ fn cmd_generate(config_path: PathBuf) -> Result<()> {
     for target in &cfg.target {
         let opts = emit::EmitOptions {
             callable: target.callable,
+            core: target
+                .core
+                .clone()
+                .unwrap_or_else(|| "./copy.gen".to_string()),
         };
-        let emitter = emit::emitter_for(&target.lang, opts)
+        let emitter = emit::emitter_for(&target.lang, &opts)
             .ok_or_else(|| anyhow!("unknown target lang '{}'", target.lang))?;
         let code = emitter.emit(&ir);
         let out = base.join(&target.out);

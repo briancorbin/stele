@@ -1,6 +1,6 @@
 {
   "name": "@stelegen/cli-win32-x64",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Native stele binary for Windows x64.",
   "os": [
     "win32"

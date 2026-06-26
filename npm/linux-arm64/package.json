@@ -1,6 +1,6 @@
 {
   "name": "@stelegen/cli-linux-arm64",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Native stele binary for Linux arm64.",
   "os": [
     "linux"
