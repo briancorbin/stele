@@ -79,33 +79,56 @@ locales/*.json  ──▶  parse  ──▶  IR (serializable)  ──▶  emitt
 
 The IR is the seam. `stele ir` will print it as JSON, which means emitters can even be written in their own target language (the protoc-plugin model).
 
-## Quickstart
+## Install
+
+The `stele` binary ships as a native package — no Rust toolchain needed. Add it
+and run it as a build step:
 
 ```bash
-# from the repo, build the binary
-cargo build --release
+pnpm add -D @stelegen/cli        # or: npm i -D @stelegen/cli
+```
 
-# point it at a config and generate
-./target/release/stele generate          # reads ./stele.toml
+The right prebuilt binary for your platform is pulled in automatically (macOS
+arm64/x64, Linux x64/arm64, Windows x64). Other ways in:
 
-# inspect the intermediate representation
-./target/release/stele ir --locales examples/locales --canonical en
+```bash
+cargo install stelegen           # Rust users — installs the `stele` binary
+cargo build --release            # from a clone — ./target/release/stele
+```
+
+## Quickstart
+
+Point `stele` at a config and generate, then commit the output and import it.
+
+```bash
+stele generate                   # reads ./stele.toml
+stele ir --locales locales --canonical en   # inspect the IR
 ```
 
 `stele.toml`:
 
 ```toml
 canonical = "en"
-locales   = "examples/locales"
+locales   = "locales"
 
 [[target]]
 lang = "typescript"
-out  = "examples/out/copy.gen.ts"
+out  = "src/copy.gen.ts"
+# callable = true               # emit no-arg leaves as () => "..." thunks
 
 [[target]]
 lang = "swift"
-out  = "examples/out/Copy.swift"
+out  = "Sources/Copy.swift"
 ```
+
+Wire it into your build so it can't drift:
+
+```jsonc
+// package.json
+"scripts": { "copy:gen": "stele generate" }
+```
+
+A CI check keeps generated output honest: `stele generate && git diff --exit-code`.
 
 A worked example — input, config, and generated output for both languages — lives in [`examples/`](examples/).
 
@@ -120,8 +143,9 @@ Early, but real. Both emitters are verified end-to-end: the generated code compi
       tables at generate time, validated against the oracle, emitted as pure
       lookups (correct `one`/`few`/`many` for Polish, Arabic, Russian, …; no
       runtime `Intl.PluralRules`, so it's Hermes-safe)
+- [x] Distribution — native binary via npm (`@stelegen/cli`) and crates.io (`stelegen`),
+      cross-compiled for macOS/Linux/Windows by CI on each tag
 - [ ] More emitters (Kotlin, Go, Rust, Java)
-- [ ] Distribution: native binary via npm / brew / cargo
 - [ ] `$select` (gender / arbitrary branching)
 - [ ] Validate `$plural` coverage against each locale's CLDR category set
 
