@@ -21,4 +21,7 @@ pub struct Target {
     /// For the `react` target: the import specifier to the core generated module
     /// (the `typescript` target's output). Defaults to `./copy.gen`.
     pub core: Option<String>,
+    /// Output identifier case: `camel` (default), `snake`, `pascal`, or
+    /// `preserve`. Input keys may be in any case; this picks the output.
+    pub case: Option<String>,
 }

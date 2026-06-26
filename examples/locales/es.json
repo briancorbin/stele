@@ -1,25 +1,25 @@
 {
   "home": {
     "title": "Sidewalk",
-    "greeting": "Hola {name}, hay perros cerca",
+    "greeting": "Hola {{name}}, hay perros cerca",
     "nearby": {
       "$plural": {
-        "one": "{count} perro a {radius} de ti",
-        "other": "{count} perros a {radius} de ti"
+        "one": "{{count}} perro a {{radius}} de ti",
+        "other": "{{count}} perros a {{radius}} de ti"
       }
     }
   },
   "walk": {
     "cta": {
       "start": "Empezar paseo",
-      "confirm": "Mantén pulsado para pasear a {dogName}"
+      "confirm": "Mantén pulsado para pasear a {{dogName}}"
     }
   },
   "inbox": {
     "unread": {
       "$plural": {
-        "one": "{count} mensaje sin leer",
-        "other": "{count} mensajes sin leer"
+        "one": "{{count}} mensaje sin leer",
+        "other": "{{count}} mensajes sin leer"
       }
     }
   }

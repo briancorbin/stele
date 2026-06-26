@@ -1,6 +1,6 @@
 [package]
 name = "stelegen"
-version = "0.0.4"
+version = "0.0.5"
 edition = "2021"
 description = "JSON-first, type-safe i18n codegen with pluggable per-language emitters"
 license = "MIT"
@@ -16,6 +16,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+heck = "0.5"
 icu_locale_core = "2"
 icu_plurals = "2"
 regex = "1"

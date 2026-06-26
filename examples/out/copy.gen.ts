@@ -46,7 +46,7 @@ function pluralCategory(locale: Locale, n: number): keyof Forms {
 }
 
 function interp(t: string, a: Record<string, string | number>): string {
-  return t.replace(/\{(\w+)\}/g, (_, k) => String(a[k]));
+  return t.replace(/\{\{(\w+)\}\}/g, (_, k) => String(a[k]));
 }
 
 function plural(locale: Locale, forms: Forms, n: number, a: Record<string, string | number>): string {
@@ -55,49 +55,49 @@ function plural(locale: Locale, forms: Forms, n: number, a: Record<string, strin
 
 const DATA: Record<Locale, Record<string, string | Forms>> = {
   "en": {
-    "home.greeting": "Hey {name}, there are dogs nearby",
+    "home.greeting": "Hey {{name}}, there are dogs nearby",
     "home.nearby": {
-      "one": "{count} dog within {radius} of you",
-      "other": "{count} dogs within {radius} of you"
+      "one": "{{count}} dog within {{radius}} of you",
+      "other": "{{count}} dogs within {{radius}} of you"
     },
     "home.title": "Sidewalk",
     "inbox.unread": {
-      "one": "{count} unread message",
-      "other": "{count} unread messages"
+      "one": "{{count}} unread message",
+      "other": "{{count}} unread messages"
     },
-    "walk.cta.confirm": "Hold to confirm walking {dogName}",
+    "walk.cta.confirm": "Hold to confirm walking {{dogName}}",
     "walk.cta.start": "Start walk"
   },
   "es": {
-    "home.greeting": "Hola {name}, hay perros cerca",
+    "home.greeting": "Hola {{name}}, hay perros cerca",
     "home.nearby": {
-      "one": "{count} perro a {radius} de ti",
-      "other": "{count} perros a {radius} de ti"
+      "one": "{{count}} perro a {{radius}} de ti",
+      "other": "{{count}} perros a {{radius}} de ti"
     },
     "home.title": "Sidewalk",
     "inbox.unread": {
-      "one": "{count} mensaje sin leer",
-      "other": "{count} mensajes sin leer"
+      "one": "{{count}} mensaje sin leer",
+      "other": "{{count}} mensajes sin leer"
     },
-    "walk.cta.confirm": "Mantén pulsado para pasear a {dogName}",
+    "walk.cta.confirm": "Mantén pulsado para pasear a {{dogName}}",
     "walk.cta.start": "Empezar paseo"
   },
   "pl": {
-    "home.greeting": "Cześć {name}, w pobliżu są psy",
+    "home.greeting": "Cześć {{name}}, w pobliżu są psy",
     "home.nearby": {
-      "few": "{count} psy w odległości {radius} od Ciebie",
-      "many": "{count} psów w odległości {radius} od Ciebie",
-      "one": "{count} pies w odległości {radius} od Ciebie",
-      "other": "{count} psa w odległości {radius} od Ciebie"
+      "few": "{{count}} psy w odległości {{radius}} od Ciebie",
+      "many": "{{count}} psów w odległości {{radius}} od Ciebie",
+      "one": "{{count}} pies w odległości {{radius}} od Ciebie",
+      "other": "{{count}} psa w odległości {{radius}} od Ciebie"
     },
     "home.title": "Sidewalk",
     "inbox.unread": {
-      "few": "{count} nieprzeczytane wiadomości",
-      "many": "{count} nieprzeczytanych wiadomości",
-      "one": "{count} nieprzeczytana wiadomość",
-      "other": "{count} nieprzeczytanej wiadomości"
+      "few": "{{count}} nieprzeczytane wiadomości",
+      "many": "{{count}} nieprzeczytanych wiadomości",
+      "one": "{{count}} nieprzeczytana wiadomość",
+      "other": "{{count}} nieprzeczytanej wiadomości"
     },
-    "walk.cta.confirm": "Przytrzymaj, aby potwierdzić spacer z {dogName}",
+    "walk.cta.confirm": "Przytrzymaj, aby potwierdzić spacer z {{dogName}}",
     "walk.cta.start": "Rozpocznij spacer"
   }
 };

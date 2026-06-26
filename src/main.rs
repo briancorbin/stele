@@ -48,12 +48,15 @@ fn cmd_generate(config_path: PathBuf) -> Result<()> {
     let ir = ir::build_ir(&cfg.canonical, &locales)?;
 
     for target in &cfg.target {
+        let case = emit::Case::parse(target.case.as_deref().unwrap_or("camel"))?;
+        emit::validate_idents(&ir, case)?;
         let opts = emit::EmitOptions {
             callable: target.callable,
             core: target
                 .core
                 .clone()
                 .unwrap_or_else(|| "./copy.gen".to_string()),
+            case,
         };
         let emitter = emit::emitter_for(&target.lang, &opts)
             .ok_or_else(|| anyhow!("unknown target lang '{}'", target.lang))?;

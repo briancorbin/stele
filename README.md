@@ -29,16 +29,18 @@ Author your copy as plain, translator-friendly JSON:
 {
   "home": {
     "title": "Sidewalk",
-    "greeting": "Hey {name}, there are dogs nearby",
+    "greeting": "Hey {{name}}, there are dogs nearby",
     "nearby": {
       "$plural": {
-        "one": "{count} dog within {radius} of you",
-        "other": "{count} dogs within {radius} of you"
+        "one": "{{count}} dog within {{radius}} of you",
+        "other": "{{count}} dogs within {{radius}} of you"
       }
     }
   }
 }
 ```
+
+Placeholders use the `{{name}}` double-brace convention (whitespace tolerant — `{{ name }}` works too). Literal single braces in copy are left untouched, so `"set it to {0}"` is safe.
 
 Run `stele generate`, and call into it with full autocomplete and compile-time safety — in whichever language you're writing:
 
@@ -115,6 +117,7 @@ locales   = "locales"
 lang = "typescript"
 out  = "src/copy.gen.ts"
 # callable = true               # emit no-arg leaves as () => "..." thunks
+# case = "camel"                # output identifier case (see below)
 
 [[target]]
 lang = "swift"
@@ -141,6 +144,23 @@ locales/
 `locales/en.json` (one file) and `locales/en/` (a folder tree) both work, and may
 even be mixed; everything for a locale is deep-merged. A key defined twice across
 files is an error, never a silent clobber.
+
+### Key casing
+
+Author keys in **any** case — `walker_today`, `walkerToday`, `walker-today` all
+parse the same. The `case` option on a target picks the *output* identifier case,
+applied uniformly to namespaces, leaves, and params:
+
+| `case` | `walker_today` → | param `first_name` → |
+|---|---|---|
+| `camel` (default) | `copy.walkerToday` | `{ firstName }` |
+| `snake` | `copy.walker_today` | `{ first_name }` |
+| `pascal` | `copy.WalkerToday` | `{ FirstName }` |
+| `preserve` | verbatim | verbatim |
+
+If two keys collapse to the same name under the chosen case (`dog_count` and
+`dogCount`), or a key isn't a valid identifier (`2fa`), generation fails loudly
+rather than emitting broken or silently-clobbered code.
 
 Wire it into your build so it can't drift:
 
@@ -199,6 +219,8 @@ Early, but real. Both emitters are verified end-to-end: the generated code compi
 - [x] Multi-file / folder locales (path-as-namespace, deep-merged)
 - [x] React / React Native bindings (`react` target) — reactive `useCopy` /
       `useLocale` / `CopyProvider`, locale change re-renders consumers
+- [x] `{{name}}` placeholders (double-brace, whitespace tolerant, literal-`{}`-safe)
+- [x] Any-input / chosen-output key casing (`case` option) with collision + invalid-id checks
 - [ ] More emitters (Kotlin, Go, Rust, Java)
 - [ ] `$select` (gender / arbitrary branching)
 - [ ] Validate `$plural` coverage against each locale's CLDR category set

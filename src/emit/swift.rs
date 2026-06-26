@@ -1,8 +1,10 @@
-use super::{cat_char, Emitter};
+use super::{cat_char, recase_placeholders, Case, Emitter};
 use crate::ir::{Ir, Kind, Message, MessageValue, ParamType};
 use std::collections::BTreeMap;
 
-pub struct SwiftEmitter;
+pub struct SwiftEmitter {
+    pub case: Case,
+}
 
 fn swift_type(ty: &ParamType) -> &'static str {
     match ty {
@@ -15,17 +17,17 @@ fn swift_lit(s: &str) -> String {
     serde_json::to_string(s).unwrap()
 }
 
-fn sig(m: &Message) -> String {
+fn sig(m: &Message, case: Case) -> String {
     m.params
         .iter()
-        .map(|p| format!("{}: {}", p.name, swift_type(&p.ty)))
+        .map(|p| format!("{}: {}", case.apply(&p.name), swift_type(&p.ty)))
         .collect::<Vec<_>>()
         .join(", ")
 }
 
-// Build the `[String: String]` arg dict passed to interp/plural. Int params are
-// stringified at the call site so the runtime stays format-agnostic.
-fn arg_dict(m: &Message) -> String {
+// Build the `[String: String]` arg dict passed to interp/plural. Keys match the
+// re-cased placeholders in the baked string; Int params are stringified.
+fn arg_dict(m: &Message, case: Case) -> String {
     if m.params.is_empty() {
         return "[:]".into();
     }
@@ -33,23 +35,16 @@ fn arg_dict(m: &Message) -> String {
         .params
         .iter()
         .map(|p| {
+            let name = case.apply(&p.name);
             let val = match p.ty {
-                ParamType::Number => format!("String({})", p.name),
-                ParamType::String => p.name.clone(),
+                ParamType::Number => format!("String({name})"),
+                ParamType::String => name.clone(),
             };
-            format!("\"{}\": {}", p.name, val)
+            format!("\"{name}\": {val}")
         })
         .collect::<Vec<_>>()
         .join(", ");
     format!("[{entries}]")
-}
-
-fn pascal(s: &str) -> String {
-    let mut c = s.chars();
-    match c.next() {
-        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
-        None => String::new(),
-    }
 }
 
 fn indent(s: &str, n: usize) -> String {
@@ -84,7 +79,7 @@ fn insert<'a>(branch: &mut BTreeMap<String, Node<'a>>, path: &[String], m: &'a M
     }
 }
 
-fn render_leaf(k: &str, m: &Message) -> String {
+fn render_leaf(k: &str, m: &Message, case: Case) -> String {
     let d = m.dotted();
     match m.kind {
         Kind::Plain if m.params.is_empty() => {
@@ -92,26 +87,28 @@ fn render_leaf(k: &str, m: &Message) -> String {
         }
         Kind::Plain => format!(
             "public func {k}({}) -> String {{\n    SteleData.interp(SteleData.s(locale, \"{d}\"), {})\n}}",
-            sig(m),
-            arg_dict(m)
+            sig(m, case),
+            arg_dict(m, case)
         ),
         Kind::Plural => format!(
-            "public func {k}({}) -> String {{\n    SteleData.plural(locale, \"{d}\", count, {})\n}}",
-            sig(m),
-            arg_dict(m)
+            "public func {k}({}) -> String {{\n    SteleData.plural(locale, \"{d}\", {}, {})\n}}",
+            sig(m, case),
+            case.apply("count"),
+            arg_dict(m, case)
         ),
     }
 }
 
-fn render_struct(name: &str, branch: &BTreeMap<String, Node>) -> String {
+fn render_struct(name: &str, branch: &BTreeMap<String, Node>, case: Case) -> String {
     let mut members = Vec::new();
     for (k, node) in branch {
         match node {
-            Node::Leaf(m) => members.push(render_leaf(k, m)),
+            Node::Leaf(m) => members.push(render_leaf(&case.apply(k), m, case)),
             Node::Branch(b) => {
-                let ty = pascal(k);
-                members.push(format!("public var {k}: {ty} {{ {ty}(locale) }}"));
-                members.push(render_struct(&ty, b));
+                let prop = case.apply(k);
+                let ty = Case::Pascal.apply(k); // Swift types stay PascalCase
+                members.push(format!("public var {prop}: {ty} {{ {ty}(locale) }}"));
+                members.push(render_struct(&ty, b, case));
             }
         }
     }
@@ -121,20 +118,24 @@ fn render_struct(name: &str, branch: &BTreeMap<String, Node>) -> String {
     )
 }
 
-fn dict_block(label: &str, ir: &Ir, plural: bool) -> String {
+fn dict_block(label: &str, ir: &Ir, plural: bool, case: Case) -> String {
     let mut blocks = Vec::new();
     for loc in &ir.locales {
         let entries: Vec<String> = ir
             .messages
             .iter()
             .filter_map(|m| match (plural, m.values.get(loc)) {
-                (false, Some(MessageValue::Plain(v))) => {
-                    Some(format!("            \"{}\": {},", m.dotted(), swift_lit(v)))
-                }
+                (false, Some(MessageValue::Plain(v))) => Some(format!(
+                    "            \"{}\": {},",
+                    m.dotted(),
+                    swift_lit(&recase_placeholders(v, case))
+                )),
                 (true, Some(MessageValue::Plural(forms))) => {
                     let inner = forms
                         .iter()
-                        .map(|(c, t)| format!("\"{}\": {}", c, swift_lit(t)))
+                        .map(|(c, t)| {
+                            format!("\"{}\": {}", c, swift_lit(&recase_placeholders(t, case)))
+                        })
                         .collect::<Vec<_>>()
                         .join(", ");
                     Some(format!("            \"{}\": [{inner}],", m.dotted()))
@@ -193,7 +194,7 @@ const HELPERS: &str = r#"
     }
     static func interp(_ t: String, _ a: [String: String]) -> String {
         var out = t
-        for (k, v) in a { out = out.replacingOccurrences(of: "{\(k)}", with: v) }
+        for (k, v) in a { out = out.replacingOccurrences(of: "{{\(k)}}", with: v) }
         return out
     }
     static func plural(_ l: Locale, _ k: String, _ n: Int, _ a: [String: String]) -> String {
@@ -217,8 +218,13 @@ impl Emitter for SwiftEmitter {
             .collect::<Vec<_>>()
             .join("\n");
 
-        let strings = dict_block("STRINGS: [String: [String: String]]", ir, false);
-        let plurals = dict_block("PLURALS: [String: [String: [String: String]]]", ir, true);
+        let strings = dict_block("STRINGS: [String: [String: String]]", ir, false, self.case);
+        let plurals = dict_block(
+            "PLURALS: [String: [String: [String: String]]]",
+            ir,
+            true,
+            self.case,
+        );
         let pcat_small = pcat_block("PCAT_SMALL", ir, false);
         let pcat_mod = pcat_block("PCAT_MOD", ir, true);
 
@@ -227,7 +233,7 @@ impl Emitter for SwiftEmitter {
         out.push_str("// Source of truth: locales/*.json\n");
         out.push_str("import Foundation\n\n");
         out.push_str(&format!("public enum Locale: String {{\n{cases}\n}}\n\n"));
-        out.push_str(&render_struct("Copy", &tree));
+        out.push_str(&render_struct("Copy", &tree, self.case));
         out.push_str("\n\nenum SteleData {\n");
         out.push_str(&strings);
         out.push('\n');

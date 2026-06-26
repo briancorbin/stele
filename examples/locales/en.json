@@ -1,25 +1,25 @@
 {
   "home": {
     "title": "Sidewalk",
-    "greeting": "Hey {name}, there are dogs nearby",
+    "greeting": "Hey {{ name }}, there are dogs nearby",
     "nearby": {
       "$plural": {
-        "one": "{count} dog within {radius} of you",
-        "other": "{count} dogs within {radius} of you"
+        "one": "{{count}} dog within {{radius}} of you",
+        "other": "{{count}} dogs within {{radius}} of you"
       }
     }
   },
   "walk": {
     "cta": {
       "start": "Start walk",
-      "confirm": "Hold to confirm walking {dogName}"
+      "confirm": "Hold to confirm walking {{dogName}}"
     }
   },
   "inbox": {
     "unread": {
       "$plural": {
-        "one": "{count} unread message",
-        "other": "{count} unread messages"
+        "one": "{{count}} unread message",
+        "other": "{{count}} unread messages"
       }
     }
   }

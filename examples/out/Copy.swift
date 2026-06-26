@@ -50,36 +50,36 @@ public struct Copy {
 enum SteleData {
     static let STRINGS: [String: [String: String]] = [
         "en": [
-            "home.greeting": "Hey {name}, there are dogs nearby",
+            "home.greeting": "Hey {{name}}, there are dogs nearby",
             "home.title": "Sidewalk",
-            "walk.cta.confirm": "Hold to confirm walking {dogName}",
+            "walk.cta.confirm": "Hold to confirm walking {{dogName}}",
             "walk.cta.start": "Start walk",
         ],
         "es": [
-            "home.greeting": "Hola {name}, hay perros cerca",
+            "home.greeting": "Hola {{name}}, hay perros cerca",
             "home.title": "Sidewalk",
-            "walk.cta.confirm": "Mantén pulsado para pasear a {dogName}",
+            "walk.cta.confirm": "Mantén pulsado para pasear a {{dogName}}",
             "walk.cta.start": "Empezar paseo",
         ],
         "pl": [
-            "home.greeting": "Cześć {name}, w pobliżu są psy",
+            "home.greeting": "Cześć {{name}}, w pobliżu są psy",
             "home.title": "Sidewalk",
-            "walk.cta.confirm": "Przytrzymaj, aby potwierdzić spacer z {dogName}",
+            "walk.cta.confirm": "Przytrzymaj, aby potwierdzić spacer z {{dogName}}",
             "walk.cta.start": "Rozpocznij spacer",
         ],
     ]
     static let PLURALS: [String: [String: [String: String]]] = [
         "en": [
-            "home.nearby": ["one": "{count} dog within {radius} of you", "other": "{count} dogs within {radius} of you"],
-            "inbox.unread": ["one": "{count} unread message", "other": "{count} unread messages"],
+            "home.nearby": ["one": "{{count}} dog within {{radius}} of you", "other": "{{count}} dogs within {{radius}} of you"],
+            "inbox.unread": ["one": "{{count}} unread message", "other": "{{count}} unread messages"],
         ],
         "es": [
-            "home.nearby": ["one": "{count} perro a {radius} de ti", "other": "{count} perros a {radius} de ti"],
-            "inbox.unread": ["one": "{count} mensaje sin leer", "other": "{count} mensajes sin leer"],
+            "home.nearby": ["one": "{{count}} perro a {{radius}} de ti", "other": "{{count}} perros a {{radius}} de ti"],
+            "inbox.unread": ["one": "{{count}} mensaje sin leer", "other": "{{count}} mensajes sin leer"],
         ],
         "pl": [
-            "home.nearby": ["few": "{count} psy w odległości {radius} od Ciebie", "many": "{count} psów w odległości {radius} od Ciebie", "one": "{count} pies w odległości {radius} od Ciebie", "other": "{count} psa w odległości {radius} od Ciebie"],
-            "inbox.unread": ["few": "{count} nieprzeczytane wiadomości", "many": "{count} nieprzeczytanych wiadomości", "one": "{count} nieprzeczytana wiadomość", "other": "{count} nieprzeczytanej wiadomości"],
+            "home.nearby": ["few": "{{count}} psy w odległości {{radius}} od Ciebie", "many": "{{count}} psów w odległości {{radius}} od Ciebie", "one": "{{count}} pies w odległości {{radius}} od Ciebie", "other": "{{count}} psa w odległości {{radius}} od Ciebie"],
+            "inbox.unread": ["few": "{{count}} nieprzeczytane wiadomości", "many": "{{count}} nieprzeczytanych wiadomości", "one": "{{count}} nieprzeczytana wiadomość", "other": "{{count}} nieprzeczytanej wiadomości"],
         ],
     ]
     static let PCAT_SMALL: [String: String] = [
@@ -114,7 +114,7 @@ enum SteleData {
     }
     static func interp(_ t: String, _ a: [String: String]) -> String {
         var out = t
-        for (k, v) in a { out = out.replacingOccurrences(of: "{\(k)}", with: v) }
+        for (k, v) in a { out = out.replacingOccurrences(of: "{{\(k)}}", with: v) }
         return out
     }
     static func plural(_ l: Locale, _ k: String, _ n: Int, _ a: [String: String]) -> String {

@@ -3,6 +3,18 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::sync::LazyLock;
+
+/// Matches `{{ name }}` placeholders — double-brace, whitespace tolerant. Single
+/// braces are left alone, so literal `{x}` in copy passes through untouched.
+static PLACEHOLDER: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\{\{\s*(\w+)\s*\}\}").unwrap());
+
+/// Canonicalize placeholders to `{{name}}` (no inner spaces) at generate time, so
+/// every emitter's runtime interpolation can match the same strict token and the
+/// TS and Swift runtimes can never drift.
+fn normalize(s: &str) -> String {
+    PLACEHOLDER.replace_all(s, "{{${1}}}").into_owned()
+}
 
 /// The language-neutral intermediate representation. This is the contract every
 /// emitter consumes; it serializes to/from JSON so emitters can live in any
@@ -72,17 +84,9 @@ pub fn build_ir(canonical: &str, locales: &BTreeMap<String, Value>) -> Result<Ir
     let canon = locales
         .get(canonical)
         .ok_or_else(|| anyhow!("canonical locale '{}' not found", canonical))?;
-    let placeholder = Regex::new(r"\{(\w+)\}").unwrap();
     let mut messages = Vec::new();
     let mut path = Vec::new();
-    walk(
-        canon,
-        &mut path,
-        locales,
-        canonical,
-        &placeholder,
-        &mut messages,
-    )?;
+    walk(canon, &mut path, locales, canonical, &mut messages)?;
 
     let mut plural_rules = BTreeMap::new();
     for loc in locales.keys() {
@@ -102,7 +106,6 @@ fn walk(
     path: &mut Vec<String>,
     locales: &BTreeMap<String, Value>,
     canonical: &str,
-    ph: &Regex,
     out: &mut Vec<Message>,
 ) -> Result<()> {
     let obj = node
@@ -112,7 +115,7 @@ fn walk(
         path.push(key.clone());
         if let Some(s) = val.as_str() {
             // plain string leaf
-            let params = params_from(s, ph);
+            let params = params_from(s);
             let values = collect_values(path, locales, canonical, false);
             out.push(Message {
                 path: path.clone(),
@@ -131,7 +134,7 @@ fn walk(
                 name: "count".into(),
                 ty: ParamType::Number,
             }];
-            for p in params_from(other, ph) {
+            for p in params_from(other) {
                 if p.name != "count" {
                     params.push(p);
                 }
@@ -145,16 +148,16 @@ fn walk(
             });
         } else if val.is_object() {
             // namespace
-            walk(val, path, locales, canonical, ph, out)?;
+            walk(val, path, locales, canonical, out)?;
         }
         path.pop();
     }
     Ok(())
 }
 
-fn params_from(s: &str, ph: &Regex) -> Vec<Param> {
+fn params_from(s: &str) -> Vec<Param> {
     let mut seen: Vec<Param> = Vec::new();
-    for cap in ph.captures_iter(s) {
+    for cap in PLACEHOLDER.captures_iter(s) {
         let name = cap[1].to_string();
         if seen.iter().any(|p| p.name == name) {
             continue;
@@ -182,11 +185,33 @@ fn to_message_value(val: &Value, plural: bool) -> Option<MessageValue> {
         let m = val.as_object()?.get("$plural")?.as_object()?;
         let forms = m
             .iter()
-            .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string())))
+            .filter_map(|(k, v)| Some((k.clone(), normalize(v.as_str()?))))
             .collect();
         Some(MessageValue::Plural(forms))
     } else {
-        Some(MessageValue::Plain(val.as_str()?.to_string()))
+        Some(MessageValue::Plain(normalize(val.as_str()?)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{normalize, params_from};
+
+    #[test]
+    fn extracts_double_brace_params_whitespace_tolerant() {
+        let names: Vec<_> = params_from("Hi {{name}}, {{ count }} nearby")
+            .into_iter()
+            .map(|p| p.name)
+            .collect();
+        assert_eq!(names, vec!["name", "count"]);
+    }
+
+    #[test]
+    fn normalize_canonicalizes_spacing_and_leaves_single_braces() {
+        assert_eq!(normalize("Hi {{ name }}"), "Hi {{name}}");
+        assert_eq!(normalize("{{count}} dogs"), "{{count}} dogs");
+        // literal single braces are NOT placeholders — pass through untouched
+        assert_eq!(normalize("set it to {x}"), "set it to {x}");
     }
 }
 
