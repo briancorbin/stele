@@ -97,10 +97,10 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           for pkg in darwin-arm64 darwin-x64 linux-x64 linux-arm64 win32-x64; do
-            npm publish "npm/$pkg" --access public
+            npm publish "./npm/$pkg" --access public
           done
 
       - name: Publish cli launcher
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish npm/cli --access public
+        run: npm publish ./npm/cli --access public
