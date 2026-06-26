@@ -145,7 +145,10 @@ fn dict_block(label: &str, ir: &Ir, plural: bool) -> String {
         if entries.is_empty() {
             blocks.push(format!("        \"{loc}\": [:],"));
         } else {
-            blocks.push(format!("        \"{loc}\": [\n{}\n        ],", entries.join("\n")));
+            blocks.push(format!(
+                "        \"{loc}\": [\n{}\n        ],",
+                entries.join("\n")
+            ));
         }
     }
     format!("    static let {label} = [\n{}\n    ]", blocks.join("\n"))

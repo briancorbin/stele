@@ -1,12 +1,12 @@
 {
-  "name": "@stelegen/cli-darwin-arm64",
+  "name": "@stelegen/cli-darwin-x64",
   "version": "0.0.2",
-  "description": "Native stele binary for macOS arm64.",
+  "description": "Native stele binary for macOS x64.",
   "os": [
     "darwin"
   ],
   "cpu": [
-    "arm64"
+    "x64"
   ],
   "files": [
     "stele"

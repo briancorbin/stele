@@ -1,15 +1,15 @@
 {
-  "name": "@stelegen/cli-darwin-arm64",
+  "name": "@stelegen/cli-win32-x64",
   "version": "0.0.2",
-  "description": "Native stele binary for macOS arm64.",
+  "description": "Native stele binary for Windows x64.",
   "os": [
-    "darwin"
+    "win32"
   ],
   "cpu": [
-    "arm64"
+    "x64"
   ],
   "files": [
-    "stele"
+    "stele.exe"
   ],
   "license": "MIT",
   "repository": {

@@ -75,7 +75,14 @@ pub fn build_ir(canonical: &str, locales: &BTreeMap<String, Value>) -> Result<Ir
     let placeholder = Regex::new(r"\{(\w+)\}").unwrap();
     let mut messages = Vec::new();
     let mut path = Vec::new();
-    walk(canon, &mut path, locales, canonical, &placeholder, &mut messages)?;
+    walk(
+        canon,
+        &mut path,
+        locales,
+        canonical,
+        &placeholder,
+        &mut messages,
+    )?;
 
     let mut plural_rules = BTreeMap::new();
     for loc in locales.keys() {

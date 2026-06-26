@@ -1,0 +1,106 @@
+name: release
+
+# Push a tag like `v0.0.2` (or run manually) to cross-compile the `stele`
+# binary for every target and publish the @stelegen npm packages.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. 0.0.2)"
+        required: true
+
+jobs:
+  build:
+    name: build ${{ matrix.pkg }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, target: aarch64-apple-darwin, pkg: darwin-arm64, ext: "" }
+          - { os: macos-latest, target: x86_64-apple-darwin, pkg: darwin-x64, ext: "" }
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, pkg: linux-x64, ext: "" }
+          - { os: ubuntu-latest, target: aarch64-unknown-linux-gnu, pkg: linux-arm64, ext: "", cross: "true" }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, pkg: win32-x64, ext: ".exe" }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install aarch64 Linux linker
+        if: matrix.cross == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Stage binary
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/stele${{ matrix.ext }}" "dist/stele${{ matrix.ext }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.pkg }}
+          path: dist/stele${{ matrix.ext }}
+
+  publish:
+    name: publish to npm
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Assemble platform packages
+        shell: bash
+        run: |
+          for pkg in darwin-arm64 darwin-x64 linux-x64 linux-arm64; do
+            cp "artifacts/$pkg/stele" "npm/$pkg/stele"
+            chmod +x "npm/$pkg/stele"
+          done
+          cp "artifacts/win32-x64/stele.exe" "npm/win32-x64/stele.exe"
+
+      - name: Stamp versions
+        run: node npm/stamp-version.mjs "${{ steps.ver.outputs.version }}"
+
+      - name: Publish platform packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for pkg in darwin-arm64 darwin-x64 linux-x64 linux-arm64 win32-x64; do
+            npm publish "npm/$pkg" --access public
+          done
+
+      - name: Publish cli launcher
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish npm/cli --access public

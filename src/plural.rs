@@ -56,7 +56,10 @@ pub fn build_plural_table(tag: &str) -> Result<PluralTable> {
         }
     }
 
-    let categories = rules.categories().map(|c| cat_name(c).to_string()).collect();
+    let categories = rules
+        .categories()
+        .map(|c| cat_name(c).to_string())
+        .collect();
     Ok(PluralTable {
         categories,
         small,
