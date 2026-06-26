@@ -121,6 +121,27 @@ lang = "swift"
 out  = "Sources/Copy.swift"
 ```
 
+### Locale layout
+
+A locale can be one flat file, or split across files and folders — the path
+becomes the namespace, so you organize copy however your app is organized:
+
+```
+locales/
+  en/
+    nav.json            →  copy.nav.*
+    walker/
+      today.json        →  copy.walker.today.*
+      schedule.json     →  copy.walker.schedule.*
+  es/
+    nav.json
+    ...
+```
+
+`locales/en.json` (one file) and `locales/en/` (a folder tree) both work, and may
+even be mixed; everything for a locale is deep-merged. A key defined twice across
+files is an error, never a silent clobber.
+
 Wire it into your build so it can't drift:
 
 ```jsonc

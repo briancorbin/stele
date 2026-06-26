@@ -1,6 +1,6 @@
 {
   "name": "@stelegen/cli-darwin-arm64",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Native stele binary for macOS arm64.",
   "os": [
     "darwin"
