@@ -1,6 +1,6 @@
 [package]
 name = "stelegen"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 description = "JSON-first, type-safe i18n codegen with pluggable per-language emitters"
 license = "MIT"
