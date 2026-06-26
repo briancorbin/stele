@@ -13,4 +13,9 @@ pub struct Config {
 pub struct Target {
     pub lang: String,
     pub out: PathBuf,
+    /// When true, no-argument leaves are emitted as `() => "..."` thunks rather
+    /// than bare string constants. Matches codebases where every copy leaf is
+    /// callable (e.g. `copy.home.title()`). TypeScript only.
+    #[serde(default)]
+    pub callable: bool,
 }

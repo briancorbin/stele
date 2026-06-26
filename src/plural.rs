@@ -1,7 +1,7 @@
 use crate::ir::PluralTable;
 use anyhow::{anyhow, Result};
-use icu::locale::Locale;
-use icu::plurals::{PluralCategory, PluralRules};
+use icu_locale_core::Locale;
+use icu_plurals::{PluralCategory, PluralRules};
 
 fn cat_name(c: PluralCategory) -> &'static str {
     match c {

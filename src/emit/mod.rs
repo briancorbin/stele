@@ -10,9 +10,17 @@ pub trait Emitter {
     fn emit(&self, ir: &Ir) -> String;
 }
 
-pub fn emitter_for(lang: &str) -> Option<Box<dyn Emitter>> {
+/// Per-target emitter options, threaded from `stele.toml`.
+#[derive(Default, Clone, Copy)]
+pub struct EmitOptions {
+    pub callable: bool,
+}
+
+pub fn emitter_for(lang: &str, opts: EmitOptions) -> Option<Box<dyn Emitter>> {
     match lang {
-        "typescript" | "ts" => Some(Box::new(ts::TsEmitter)),
+        "typescript" | "ts" => Some(Box::new(ts::TsEmitter {
+            callable: opts.callable,
+        })),
         "swift" => Some(Box::new(swift::SwiftEmitter)),
         _ => None,
     }

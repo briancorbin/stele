@@ -48,7 +48,10 @@ fn cmd_generate(config_path: PathBuf) -> Result<()> {
     let ir = ir::build_ir(&cfg.canonical, &locales)?;
 
     for target in &cfg.target {
-        let emitter = emit::emitter_for(&target.lang)
+        let opts = emit::EmitOptions {
+            callable: target.callable,
+        };
+        let emitter = emit::emitter_for(&target.lang, opts)
             .ok_or_else(|| anyhow!("unknown target lang '{}'", target.lang))?;
         let code = emitter.emit(&ir);
         let out = base.join(&target.out);

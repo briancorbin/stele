@@ -1,0 +1,19 @@
+{
+  "name": "@stelegen/cli-darwin-arm64",
+  "version": "0.0.1",
+  "description": "Native stele binary for macOS arm64.",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "files": [
+    "stele"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/briancorbin/stele"
+  }
+}

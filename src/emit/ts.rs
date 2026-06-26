@@ -3,7 +3,9 @@ use crate::ir::{Ir, Kind, Message, MessageValue, ParamType};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
-pub struct TsEmitter;
+pub struct TsEmitter {
+    pub callable: bool,
+}
 
 fn ts_type(ty: &ParamType) -> &'static str {
     match ty {
@@ -20,9 +22,13 @@ fn args(m: &Message) -> String {
         .join("; ")
 }
 
-fn sig(m: &Message) -> String {
+fn sig(m: &Message, callable: bool) -> String {
     if m.params.is_empty() {
-        "string".into()
+        if callable {
+            "() => string".into()
+        } else {
+            "string".into()
+        }
     } else {
         format!("(a: {{ {} }}) => string", args(m))
     }
@@ -46,21 +52,24 @@ fn insert<'a>(branch: &mut BTreeMap<String, Node<'a>>, path: &[String], m: &'a M
     }
 }
 
-fn render_type(branch: &BTreeMap<String, Node>, indent: usize) -> String {
+fn render_type(branch: &BTreeMap<String, Node>, indent: usize, callable: bool) -> String {
     let pad = "  ".repeat(indent);
     branch
         .iter()
         .map(|(k, node)| match node {
-            Node::Leaf(m) => format!("{pad}{k}: {};", sig(m)),
+            Node::Leaf(m) => format!("{pad}{k}: {};", sig(m, callable)),
             Node::Branch(b) => {
-                format!("{pad}{k}: {{\n{}\n{pad}}};", render_type(b, indent + 1))
+                format!(
+                    "{pad}{k}: {{\n{}\n{pad}}};",
+                    render_type(b, indent + 1, callable)
+                )
             }
         })
         .collect::<Vec<_>>()
         .join("\n")
 }
 
-fn render_accessor(branch: &BTreeMap<String, Node>, indent: usize) -> String {
+fn render_accessor(branch: &BTreeMap<String, Node>, indent: usize, callable: bool) -> String {
     let pad = "  ".repeat(indent);
     branch
         .iter()
@@ -68,6 +77,9 @@ fn render_accessor(branch: &BTreeMap<String, Node>, indent: usize) -> String {
             Node::Leaf(m) => {
                 let dotted = m.dotted();
                 match m.kind {
+                    Kind::Plain if m.params.is_empty() && callable => {
+                        format!("{pad}{k}: () => D[\"{dotted}\"] as string,")
+                    }
                     Kind::Plain if m.params.is_empty() => {
                         format!("{pad}{k}: D[\"{dotted}\"] as string,")
                     }
@@ -82,7 +94,10 @@ fn render_accessor(branch: &BTreeMap<String, Node>, indent: usize) -> String {
                 }
             }
             Node::Branch(b) => {
-                format!("{pad}{k}: {{\n{}\n{pad}}},", render_accessor(b, indent + 1))
+                format!(
+                    "{pad}{k}: {{\n{}\n{pad}}},",
+                    render_accessor(b, indent + 1, callable)
+                )
             }
         })
         .collect::<Vec<_>>()
@@ -171,7 +186,7 @@ impl Emitter for TsEmitter {
         out.push_str(&format!("export type Locale = {locale_union};\n\n"));
         out.push_str(&format!(
             "export interface Copy {{\n{}\n}}\n",
-            render_type(&tree, 1)
+            render_type(&tree, 1, self.callable)
         ));
         out.push_str(&format!(
             "\nconst PCAT_SMALL: Record<Locale, string> = {{\n{}\n}};\n",
@@ -189,7 +204,7 @@ impl Emitter for TsEmitter {
         out.push_str("  const D = DATA[locale];\n");
         out.push_str(&format!(
             "  return {{\n{}\n  }};\n}}\n",
-            render_accessor(&tree, 2)
+            render_accessor(&tree, 2, self.callable)
         ));
         out
     }

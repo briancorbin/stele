@@ -1,0 +1,25 @@
+{
+  "name": "@stelegen/cli",
+  "version": "0.0.1",
+  "description": "JSON-first, type-safe i18n codegen. Ships the native `stele` binary; run it as a build step.",
+  "bin": {
+    "stele": "bin/stele.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "optionalDependencies": {
+    "@stelegen/cli-darwin-arm64": "0.0.1"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/briancorbin/stele"
+  },
+  "keywords": [
+    "i18n",
+    "codegen",
+    "localization",
+    "typescript"
+  ]
+}

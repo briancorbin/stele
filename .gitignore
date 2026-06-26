@@ -7,3 +7,8 @@ examples/out/stele_demo
 
 # macOS
 .DS_Store
+
+# Native binaries placed into npm packages (built in CI, not committed)
+npm/cli/vendor/
+npm/*/stele
+npm/*/stele.exe
