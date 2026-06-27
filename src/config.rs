@@ -18,9 +18,13 @@ pub struct Target {
     /// callable (e.g. `copy.home.title()`). TypeScript only.
     #[serde(default)]
     pub callable: bool,
-    /// For the `react` target: the import specifier to the core generated module
-    /// (the `typescript` target's output). Defaults to `./copy.gen`.
+    /// For the `store` target: the import specifier to the core generated module
+    /// (the `typescript` target's output). Defaults to `./stele.gen`.
     pub core: Option<String>,
+    /// For the `react` target: the import specifier to the `store` target's
+    /// output (where the hooks read/write the active locale). Defaults to
+    /// `./stele.store`.
+    pub store: Option<String>,
     /// Output identifier case: `camel` (default), `snake`, `pascal`, or
     /// `preserve`. Input keys may be in any case; this picks the output.
     pub case: Option<String>,

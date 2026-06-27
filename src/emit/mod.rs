@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 
 pub mod react;
+pub mod store;
 pub mod swift;
 pub mod ts;
 
@@ -82,15 +83,12 @@ impl Case {
 pub struct Binding {
     /// PascalCase type name (e.g. `Stele`).
     pub ty: String,
-    /// lowerCamelCase value name (e.g. `stele`) — the React context field.
-    pub field: String,
 }
 
 impl Binding {
     pub fn new(raw: &str) -> Binding {
         Binding {
             ty: raw.to_upper_camel_case(),
-            field: raw.to_lower_camel_case(),
         }
     }
     /// Factory function name, e.g. `createStele`.
@@ -101,9 +99,9 @@ impl Binding {
     pub fn hook(&self) -> String {
         format!("use{}", self.ty)
     }
-    /// React provider component name, e.g. `SteleProvider`.
-    pub fn provider(&self) -> String {
-        format!("{}Provider", self.ty)
+    /// Store accessor getter name, e.g. `getStele`.
+    pub fn getter(&self) -> String {
+        format!("get{}", self.ty)
     }
 }
 
@@ -111,8 +109,10 @@ impl Binding {
 #[derive(Clone)]
 pub struct EmitOptions {
     pub callable: bool,
-    /// Import specifier to the core module (used by the `react` target).
+    /// Import specifier to the core module (used by the `store` target).
     pub core: String,
+    /// Import specifier to the store module (used by the `react` target).
+    pub store: String,
     /// Output identifier case.
     pub case: Case,
     /// The brand name the generated API is built around.
@@ -130,8 +130,12 @@ pub fn emitter_for(lang: &str, opts: &EmitOptions) -> Option<Box<dyn Emitter>> {
             case: opts.case,
             binding: opts.binding.clone(),
         })),
-        "react" => Some(Box::new(react::ReactEmitter {
+        "store" => Some(Box::new(store::StoreEmitter {
             core: opts.core.clone(),
+            binding: opts.binding.clone(),
+        })),
+        "react" => Some(Box::new(react::ReactEmitter {
+            store: opts.store.clone(),
             binding: opts.binding.clone(),
         })),
         _ => None,

@@ -10,6 +10,11 @@ lang = "swift"
 out = "examples/out/Stele.swift"
 
 [[target]]
+lang = "store"
+out = "examples/out/stele.store.ts"
+core = "./stele.gen"
+
+[[target]]
 lang = "react"
 out = "examples/out/stele.react.ts"
-core = "./stele.gen"
+store = "./stele.store"

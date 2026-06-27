@@ -55,7 +55,11 @@ fn cmd_generate(config_path: PathBuf) -> Result<()> {
             core: target
                 .core
                 .clone()
-                .unwrap_or_else(|| "./copy.gen".to_string()),
+                .unwrap_or_else(|| "./stele.gen".to_string()),
+            store: target
+                .store
+                .clone()
+                .unwrap_or_else(|| "./stele.store".to_string()),
             case,
             binding: emit::Binding::new(target.binding.as_deref().unwrap_or("stele")),
         };

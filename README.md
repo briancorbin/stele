@@ -192,12 +192,13 @@ A CI check keeps generated output honest: `stele generate && git diff --exit-cod
 
 A worked example — input, config, and generated output for both languages — lives in [`examples/`](examples/).
 
-### React / React Native
+### The locale store
 
-The core output stays zero-runtime and framework-agnostic. Add a `react` target
-to *also* emit reactive bindings — a tiny generated file that wraps the core in a
-Context, so changing the locale re-renders every `useStele()` consumer. Works the
-same on web React and React Native (it's `createElement` + hooks, no JSX build).
+The core factory (`createStele(locale)`) is pure — you pass the locale in. For an
+app you usually want *one* active locale that any code can read or change, that
+persists across launches, and that re-renders the UI when it flips. That's the
+`store` target: a tiny framework-agnostic module that owns the active locale and
+is the single source of truth.
 
 ```toml
 [[target]]
@@ -205,20 +206,74 @@ lang = "typescript"
 out  = "src/stele.gen.ts"
 
 [[target]]
+lang = "store"
+out  = "src/stele.store.ts"
+core = "./stele.gen"          # import path to the typescript target's output
+```
+
+```ts
+import {
+  getStele, getLocale, setLocale, subscribeLocale,  // read / write / observe
+  followDevice, isFollowingDevice, syncDevice,        // device / "system" mode
+  resolveLocale, initLocale,                          // startup helpers
+} from "./stele.store";
+
+getStele().home.greeting({ name });   // accessor bound to the active locale
+getLocale();                          // "en"
+setLocale("es");                      // pin Spanish — stops following the device, persists
+followDevice();                       // back to following the device locale, persists "system"
+```
+
+The store tracks a **preference**, not just a locale: either `"system"` (follow
+the device) or a pinned `Locale`. That's the difference between "remember my
+choice" and "follow my phone" — keeping them distinct is what avoids the classic
+bug where a once-saved locale shadows the device forever.
+
+- **`resolveLocale(tags)`** maps arbitrary BCP-47 device tags to a supported
+  `Locale` (`["es-MX","en-US"] → "es"`), falling back to the canonical locale.
+- **`initLocale({ storage, deviceLocales })`** is the one-call startup: restore the
+  saved preference (or default to `"system"`), wire the device-locale source, and
+  apply it. Persistence is a pluggable adapter (`LocaleStorage`) storing
+  `"system" | Locale` — *you* hand it AsyncStorage / localStorage, so the store
+  pulls in no platform dependency.
+- **`syncDevice()`** re-reads the device locale *only while in system mode* — wire
+  it to an `AppState` "active" listener to track the OS language changing live.
+
+```ts
+// once, before your first render (e.g. behind a splash screen):
+await initLocale({
+  storage: {                                          // ~3 lines you provide
+    load: () => AsyncStorage.getItem("locale") as Promise<LocalePref | null>,
+    save: (p) => AsyncStorage.setItem("locale", p),
+  },
+  deviceLocales: () => Localization.locales,          // expo-localization, navigator.languages, …
+});
+
+// follow the device with no persistence at all? just:
+await initLocale({ deviceLocales: () => Localization.locales });
+```
+
+### React / React Native
+
+Add a `react` target to bind the store to React via `useSyncExternalStore` —
+hooks only, **no Provider to mount**. `setLocale` from anywhere (a component or
+not) re-renders every `useStele()` consumer. Works the same on web React and
+React Native (no JSX build step).
+
+```toml
+[[target]]
 lang = "react"
 out  = "src/stele.react.ts"
-core = "./stele.gen"         # import path to the typescript target's output
+store = "./stele.store"       # import path to the store target's output
 ```
 
 ```tsx
-import { SteleProvider, useStele, useLocale } from "./stele.react";
-
-// at the root:
-<SteleProvider locale="en"><App /></SteleProvider>;
+import { useStele, useLocale, useFollowingDevice } from "./stele.react";
 
 // in a component — re-renders when the locale changes:
 const stele = useStele();
 const [locale, setLocale] = useLocale();
+const onSystem = useFollowingDevice();   // for a "System" radio in settings
 return <Text onPress={() => setLocale("es")}>{stele.home.greeting({ name })}</Text>;
 ```
 
@@ -236,8 +291,15 @@ Early, but real. Both emitters are verified end-to-end: the generated code compi
 - [x] Distribution — native binary via npm (`@stelegen/cli`) and crates.io (`stelegen`),
       cross-compiled for macOS/Linux/Windows by CI on each tag
 - [x] Multi-file / folder locales (path-as-namespace, deep-merged)
-- [x] React / React Native bindings (`react` target) — reactive `useStele` /
-      `useLocale` / `SteleProvider`, locale change re-renders consumers
+- [x] Locale store (`store` target) — framework-agnostic single source of truth:
+      `getLocale` / `setLocale` / `subscribeLocale` / `resolveLocale` /
+      `initLocale`, observable + pluggable persistence, zero platform deps
+- [x] Device / "system" mode — store tracks a `"system" | Locale` preference
+      (`followDevice` / `isFollowingDevice` / `syncDevice`), so "follow the phone"
+      and "remember my choice" stay distinct
+- [x] React / React Native bindings (`react` target) — `useStele` / `useLocale` /
+      `useFollowingDevice` bound to the store via `useSyncExternalStore`, no
+      Provider, `setLocale` from anywhere re-renders consumers
 - [x] `{{name}}` placeholders (double-brace, whitespace tolerant, literal-`{}`-safe)
 - [x] Any-input / chosen-output key casing (`case` option) with collision + invalid-id checks
 - [x] Configurable API binding name (`binding` option) — `stele.*` by default, one word renames the whole surface
