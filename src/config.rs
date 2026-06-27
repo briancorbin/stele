@@ -7,6 +7,34 @@ pub struct Config {
     pub locales: PathBuf,
     #[serde(default)]
     pub target: Vec<Target>,
+    /// Optional `[package]` block: emit a self-contained node package (compiled
+    /// `.js` + `.d.ts` + `package.json`) instead of (or alongside) loose `.ts`
+    /// targets. Point `out` at `node_modules/<name>/` for a zero-repo-footprint
+    /// "codegen as a dependency" setup.
+    pub package: Option<Package>,
+}
+
+#[derive(Deserialize)]
+pub struct Package {
+    /// The package name written into `package.json` (e.g. `@myapp/copy`).
+    pub name: String,
+    /// Output directory for the package (e.g. `node_modules/@myapp/copy`).
+    pub out: PathBuf,
+    /// Version written into `package.json`. Defaults to `0.0.0`.
+    pub version: Option<String>,
+    /// Include the locale store (`store.js` / `store.d.ts`). Implied by `react`.
+    #[serde(default)]
+    pub store: bool,
+    /// Include the React hooks (`react.js` / `react.d.ts`).
+    #[serde(default)]
+    pub react: bool,
+    /// Emit no-arg leaves as `() => "..."` thunks (same as the `callable` target option).
+    #[serde(default)]
+    pub callable: bool,
+    /// Output identifier case (same as the target `case` option).
+    pub case: Option<String>,
+    /// Brand name for the API (same as the target `binding` option).
+    pub binding: Option<String>,
 }
 
 #[derive(Deserialize)]

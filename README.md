@@ -277,6 +277,45 @@ const onSystem = useFollowingDevice();   // for a "System" radio in settings
 return <Text onPress={() => setLocale("es")}>{stele.home.greeting({ name })}</Text>;
 ```
 
+### As a node package (no files in your repo)
+
+Instead of loose `.ts` files, Stele can emit a **compiled package** — `.js` +
+`.d.ts` + `package.json` — via a `[package]` block. Point `out` straight at
+`node_modules/<name>/` and Stele writes a real, import-by-name package there;
+nothing lands in your source tree. It's the "codegen as a dependency" model, à la
+Prisma Client.
+
+```toml
+[package]
+name  = "@myapp/copy"
+out   = "node_modules/@myapp/copy"
+store = true
+react = true
+```
+
+```jsonc
+// package.json — regenerate on install (see the caveat below)
+"scripts": { "postinstall": "stele generate", "copy:gen": "stele generate" }
+```
+
+```ts
+import { createStele }          from "@myapp/copy";
+import { useStele, useLocale }  from "@myapp/copy/react";
+import { getStele, initLocale } from "@myapp/copy/store";
+```
+
+Stele emits the `.js` and `.d.ts` **directly** — no `tsc` in the loop, it stays
+one binary. `tsc` trusts the `.d.ts`, and the package resolves by name through its
+`exports` map (`.`, `./store`, `./react`). A generated example lives in
+[`examples/out/pkg/`](examples/out/pkg/).
+
+> **`node_modules` is the package manager's turf.** `npm` / `pnpm` / `yarn install`
+> prune directories they didn't create, so you must regenerate on `postinstall`.
+> Under pnpm's strict store this is the same pattern — and the same caveats — as
+> Prisma Client; Metro's resolver tends to tolerate it well for React Native. If
+> your setup fights it, point `out` at a gitignored folder and add one resolver
+> alias instead — same artifact, different home.
+
 ## Status
 
 Early, but real. Both emitters are verified end-to-end: the generated code compiles, runs, and rejects bad calls at compile time.
@@ -303,6 +342,9 @@ Early, but real. Both emitters are verified end-to-end: the generated code compi
 - [x] `{{name}}` placeholders (double-brace, whitespace tolerant, literal-`{}`-safe)
 - [x] Any-input / chosen-output key casing (`case` option) with collision + invalid-id checks
 - [x] Configurable API binding name (`binding` option) — `stele.*` by default, one word renames the whole surface
+- [x] Node package output (`[package]`) — compiled `.js` + `.d.ts` + `package.json`
+      (import-by-name, `exports` map) instead of loose `.ts`; emit into
+      `node_modules/<name>` for a zero-repo-footprint "codegen as a dependency" setup
 - [ ] More emitters (Kotlin, Go, Rust, Java)
 - [ ] `$select` (gender / arbitrary branching)
 - [ ] Validate `$plural` coverage against each locale's CLDR category set

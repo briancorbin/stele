@@ -1,0 +1,12 @@
+{
+  "name": "@stele/example",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": { "types": "./index.d.ts", "default": "./index.js" },
+    "./store": { "types": "./store.d.ts", "default": "./store.js" },
+    "./react": { "types": "./react.d.ts", "default": "./react.js" }
+  }
+}

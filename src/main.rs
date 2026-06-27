@@ -74,6 +74,34 @@ fn cmd_generate(config_path: PathBuf) -> Result<()> {
         std::fs::write(&out, code)?;
         println!("\u{2713} {:<11} \u{2192} {}", target.lang, out.display());
     }
+
+    if let Some(pkg) = &cfg.package {
+        let case = emit::Case::parse(pkg.case.as_deref().unwrap_or("camel"))?;
+        emit::validate_idents(&ir, case)?;
+        let opts = emit::pkg::PackageOptions {
+            name: pkg.name.clone(),
+            version: pkg.version.clone().unwrap_or_else(|| "0.0.0".to_string()),
+            store: pkg.store,
+            react: pkg.react,
+            callable: pkg.callable,
+            case,
+            binding: emit::Binding::new(pkg.binding.as_deref().unwrap_or("stele")),
+        };
+        let dir = base.join(&pkg.out);
+        std::fs::create_dir_all(&dir)?;
+        let files = emit::pkg::render(&ir, &opts);
+        let count = files.len();
+        for (name, content) in files {
+            std::fs::write(dir.join(&name), content)?;
+        }
+        println!(
+            "\u{2713} {:<11} \u{2192} {} ({} files)",
+            "package",
+            dir.display(),
+            count
+        );
+    }
+
     Ok(())
 }
 

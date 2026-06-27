@@ -5,6 +5,7 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
+pub mod pkg;
 pub mod react;
 pub mod store;
 pub mod swift;

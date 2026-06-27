@@ -18,3 +18,12 @@ core = "./stele.gen"
 lang = "react"
 out = "examples/out/stele.react.ts"
 store = "./stele.store"
+
+# A self-contained node package (compiled .js + .d.ts + package.json) — the
+# "codegen as a dependency" model. Point `out` at node_modules/<name> in a real
+# project and import it by name.
+[package]
+name = "@stele/example"
+out = "examples/out/pkg"
+store = true
+react = true
