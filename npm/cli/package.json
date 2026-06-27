@@ -1,6 +1,6 @@
 {
   "name": "@stelegen/cli",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "description": "JSON-first, type-safe i18n codegen. Ships the native `stele` binary; run it as a build step.",
   "bin": {
     "stele": "bin/stele.js"
@@ -9,11 +9,11 @@
     "bin"
   ],
   "optionalDependencies": {
-    "@stelegen/cli-darwin-arm64": "0.0.10",
-    "@stelegen/cli-darwin-x64": "0.0.10",
-    "@stelegen/cli-linux-x64": "0.0.10",
-    "@stelegen/cli-linux-arm64": "0.0.10",
-    "@stelegen/cli-win32-x64": "0.0.10"
+    "@stelegen/cli-darwin-arm64": "0.0.11",
+    "@stelegen/cli-darwin-x64": "0.0.11",
+    "@stelegen/cli-linux-x64": "0.0.11",
+    "@stelegen/cli-linux-arm64": "0.0.11",
+    "@stelegen/cli-win32-x64": "0.0.11"
   },
   "license": "MIT",
   "repository": {
