@@ -1,6 +1,6 @@
 {
   "name": "@stelegen/cli-linux-x64",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "description": "Native stele binary for Linux x64.",
   "os": [
     "linux"
