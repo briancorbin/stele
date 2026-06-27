@@ -5,8 +5,8 @@ export type Locale = "en" | "es" | "pl";
 
 export interface Copy {
   home: {
-    greeting: (a: { name: string }) => string;
-    nearby: (a: { count: number; radius: string }) => string;
+    greeting: (a: { name: string | number }) => string;
+    nearby: (a: { count: number; radius: string | number }) => string;
     title: string;
   };
   inbox: {
@@ -14,7 +14,7 @@ export interface Copy {
   };
   walk: {
     cta: {
-      confirm: (a: { dogName: string }) => string;
+      confirm: (a: { dogName: string | number }) => string;
       start: string;
     };
   };
@@ -106,8 +106,8 @@ export function createCopy(locale: Locale): Copy {
   const D = DATA[locale];
   return {
     home: {
-      greeting: (a: { name: string }) => interp(D["home.greeting"] as string, a),
-      nearby: (a: { count: number; radius: string }) => plural(locale, D["home.nearby"] as Forms, a.count, a),
+      greeting: (a: { name: string | number }) => interp(D["home.greeting"] as string, a),
+      nearby: (a: { count: number; radius: string | number }) => plural(locale, D["home.nearby"] as Forms, a.count, a),
       title: D["home.title"] as string,
     },
     inbox: {
@@ -115,7 +115,7 @@ export function createCopy(locale: Locale): Copy {
     },
     walk: {
       cta: {
-        confirm: (a: { dogName: string }) => interp(D["walk.cta.confirm"] as string, a),
+        confirm: (a: { dogName: string | number }) => interp(D["walk.cta.confirm"] as string, a),
         start: D["walk.cta.start"] as string,
       },
     },

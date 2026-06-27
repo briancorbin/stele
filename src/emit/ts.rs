@@ -11,7 +11,10 @@ pub struct TsEmitter {
 fn ts_type(ty: &ParamType) -> &'static str {
     match ty {
         ParamType::Number => "number",
-        ParamType::String => "string",
+        // Placeholders interpolate any stringifiable value; accepting numbers too
+        // avoids spurious `String(n)` wraps at call sites (a `count`-named param
+        // is the one inferred as a strict `number`).
+        ParamType::String => "string | number",
     }
 }
 
