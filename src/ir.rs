@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::LazyLock;
 
 /// Matches `{{ name }}` placeholders — double-brace, whitespace tolerant. Single
@@ -93,12 +93,74 @@ pub fn build_ir(canonical: &str, locales: &BTreeMap<String, Value>) -> Result<Ir
         plural_rules.insert(loc.clone(), crate::plural::build_plural_table(loc)?);
     }
 
+    // Warn if a plural omits a category its locale's CLDR rules actually produce
+    // (e.g. Polish without `few` → blank string at runtime for counts like 2).
+    for m in &messages {
+        if m.kind != Kind::Plural {
+            continue;
+        }
+        for (loc, value) in &m.values {
+            if let MessageValue::Plural(forms) = value {
+                // Only the categories the locale's INTEGER rules actually produce
+                // (from the baked tables) — not ICU's full set, which includes
+                // compact-only categories like Spanish `many` that integers never hit.
+                let table = &plural_rules[loc];
+                let reachable: HashSet<&String> =
+                    table.small.iter().chain(table.modulo.iter()).collect();
+                for cat in reachable {
+                    if !forms.contains_key(cat) {
+                        eprintln!(
+                            "warning: '{}' [{}] is missing the '{}' plural form this locale needs",
+                            m.dotted(),
+                            loc,
+                            cat
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // Warn about keys present only in a non-canonical locale — they're silently
+    // dropped (the catalog shape is defined by the canonical locale).
+    let canonical_paths: HashSet<String> = messages.iter().map(|m| m.dotted()).collect();
+    for (loc, root) in locales {
+        if loc == canonical {
+            continue;
+        }
+        let mut found = Vec::new();
+        collect_paths(root, &mut Vec::new(), &mut found);
+        for p in found {
+            if !canonical_paths.contains(&p) {
+                eprintln!(
+                    "warning: key '{p}' exists in locale '{loc}' but not in canonical '{canonical}' — it will be ignored"
+                );
+            }
+        }
+    }
+
     Ok(Ir {
         canonical: canonical.to_string(),
         locales: locales.keys().cloned().collect(),
         messages,
         plural_rules,
     })
+}
+
+/// Collect the dotted paths of every leaf (string or `$plural`) under `node`.
+fn collect_paths(node: &Value, prefix: &mut Vec<String>, out: &mut Vec<String>) {
+    let Some(obj) = node.as_object() else {
+        return;
+    };
+    for (k, v) in obj {
+        prefix.push(k.clone());
+        if v.is_string() || v.as_object().is_some_and(|o| o.contains_key("$plural")) {
+            out.push(prefix.join("."));
+        } else if v.is_object() {
+            collect_paths(v, prefix, out);
+        }
+        prefix.pop();
+    }
 }
 
 fn walk(
@@ -123,20 +185,36 @@ fn walk(
                 kind: Kind::Plain,
                 values,
             });
-        } else if let Some(forms) = val.as_object().and_then(|o| o.get("$plural")) {
+        } else if let Some(plural) = val.as_object().and_then(|o| o.get("$plural")) {
             // tagged plural leaf: { "$plural": { "one": ..., "other": ... } }
-            let other = forms
-                .as_object()
-                .and_then(|m| m.get("other"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let dotted = path.join(".");
+            let forms = plural.as_object().ok_or_else(|| {
+                anyhow!("'{dotted}' $plural must be an object of category → string")
+            })?;
+            const CATEGORIES: &[&str] = &["zero", "one", "two", "few", "many", "other"];
+            if !forms.contains_key("other") {
+                return Err(anyhow!(
+                    "'{dotted}' $plural is missing the required 'other' form"
+                ));
+            }
+            // params: `count` plus every placeholder used in ANY form (not just `other`).
             let mut params = vec![Param {
                 name: "count".into(),
                 ty: ParamType::Number,
             }];
-            for p in params_from(other) {
-                if p.name != "count" {
-                    params.push(p);
+            for (cat, form) in forms {
+                if !CATEGORIES.contains(&cat.as_str()) {
+                    return Err(anyhow!(
+                        "'{dotted}' $plural has unknown category '{cat}' (valid: zero one two few many other)"
+                    ));
+                }
+                let s = form
+                    .as_str()
+                    .ok_or_else(|| anyhow!("'{dotted}' $plural form '{cat}' must be a string"))?;
+                for p in params_from(s) {
+                    if p.name != "count" && !params.iter().any(|x| x.name == p.name) {
+                        params.push(p);
+                    }
                 }
             }
             let values = collect_values(path, locales, canonical, true);
@@ -193,28 +271,6 @@ fn to_message_value(val: &Value, plural: bool) -> Option<MessageValue> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{normalize, params_from};
-
-    #[test]
-    fn extracts_double_brace_params_whitespace_tolerant() {
-        let names: Vec<_> = params_from("Hi {{name}}, {{ count }} nearby")
-            .into_iter()
-            .map(|p| p.name)
-            .collect();
-        assert_eq!(names, vec!["name", "count"]);
-    }
-
-    #[test]
-    fn normalize_canonicalizes_spacing_and_leaves_single_braces() {
-        assert_eq!(normalize("Hi {{ name }}"), "Hi {{name}}");
-        assert_eq!(normalize("{{count}} dogs"), "{{count}} dogs");
-        // literal single braces are NOT placeholders — pass through untouched
-        assert_eq!(normalize("set it to {x}"), "set it to {x}");
-    }
-}
-
 /// Collect each locale's value for `path`. Missing translations fall back to the
 /// canonical locale and emit a loud warning, so output is always complete.
 fn collect_values(
@@ -245,4 +301,58 @@ fn collect_values(
         out.insert(loc.clone(), resolved);
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn locale(v: Value) -> BTreeMap<String, Value> {
+        BTreeMap::from([("en".to_string(), v)])
+    }
+
+    #[test]
+    fn extracts_double_brace_params_whitespace_tolerant() {
+        let names: Vec<_> = params_from("Hi {{name}}, {{ count }} nearby")
+            .into_iter()
+            .map(|p| p.name)
+            .collect();
+        assert_eq!(names, vec!["name", "count"]);
+    }
+
+    #[test]
+    fn normalize_canonicalizes_spacing_and_leaves_single_braces() {
+        assert_eq!(normalize("Hi {{ name }}"), "Hi {{name}}");
+        assert_eq!(normalize("{{count}} dogs"), "{{count}} dogs");
+        // literal single braces are NOT placeholders — pass through untouched
+        assert_eq!(normalize("set it to {x}"), "set it to {x}");
+    }
+
+    #[test]
+    fn plural_params_union_across_all_forms() {
+        let ir = build_ir(
+            "en",
+            &locale(json!({ "m": { "$plural": {
+                "one": "{{name}} has {{count}}",
+                "other": "{{count}} items"
+            } } })),
+        )
+        .unwrap();
+        let m = ir.messages.iter().find(|m| m.dotted() == "m").unwrap();
+        let names: Vec<_> = m.params.iter().map(|p| p.name.as_str()).collect();
+        // `name` appears only in the `one` form but must still be a param.
+        assert!(names.contains(&"name") && names.contains(&"count"));
+    }
+
+    #[test]
+    fn malformed_plural_is_rejected() {
+        assert!(build_ir("en", &locale(json!({ "p": { "$plural": "nope" } }))).is_err());
+        assert!(build_ir("en", &locale(json!({ "p": { "$plural": { "one": "x" } } }))).is_err());
+        assert!(build_ir(
+            "en",
+            &locale(json!({ "p": { "$plural": { "banana": "x", "other": "y" } } }))
+        )
+        .is_err());
+    }
 }

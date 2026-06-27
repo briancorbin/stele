@@ -8,6 +8,7 @@ use std::path::Path;
 ///   - `dir/<locale>/**/*.json` — a locale split across files and folders, where
 ///     each folder name and file stem becomes a namespace segment. e.g.
 ///     `dir/en/walker/today.json` contributes to `copy.walker.today.*`.
+///
 /// Everything contributing to the same locale is deep-merged into one tree.
 pub fn load_locales(dir: &Path) -> Result<BTreeMap<String, Value>> {
     let mut map: BTreeMap<String, Value> = BTreeMap::new();

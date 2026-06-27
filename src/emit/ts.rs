@@ -90,20 +90,22 @@ fn render_accessor(
             let k = case.apply(k);
             match node {
                 Node::Leaf(m) => {
-                    let dotted = m.dotted();
+                    // JSON-escape the lookup key so any raw character in the key
+                    // (quote, backslash) stays valid and matches the DATA key.
+                    let key = serde_json::to_string(&m.dotted()).unwrap();
                     match m.kind {
                         Kind::Plain if m.params.is_empty() && callable => {
-                            format!("{pad}{k}: () => D[\"{dotted}\"] as string,")
+                            format!("{pad}{k}: () => D[{key}] as string,")
                         }
                         Kind::Plain if m.params.is_empty() => {
-                            format!("{pad}{k}: D[\"{dotted}\"] as string,")
+                            format!("{pad}{k}: D[{key}] as string,")
                         }
                         Kind::Plain => format!(
-                            "{pad}{k}: (a: {{ {} }}) => interp(D[\"{dotted}\"] as string, a),",
+                            "{pad}{k}: (a: {{ {} }}) => interp(D[{key}] as string, a),",
                             args(m, case)
                         ),
                         Kind::Plural => format!(
-                            "{pad}{k}: (a: {{ {} }}) => plural(locale, D[\"{dotted}\"] as Forms, a.{count}, a),",
+                            "{pad}{k}: (a: {{ {} }}) => plural(locale, D[{key}] as Forms, a.{count}, a),",
                             args(m, case)
                         ),
                     }
@@ -149,7 +151,11 @@ fn pack(ir: &Ir, modulo: bool) -> String {
             let table = &ir.plural_rules[loc];
             let cats = if modulo { &table.modulo } else { &table.small };
             let packed: String = cats.iter().map(|c| cat_char(c)).collect();
-            format!("  {loc}: {},", serde_json::to_string(&packed).unwrap())
+            format!(
+                "  {}: {},",
+                serde_json::to_string(loc).unwrap(),
+                serde_json::to_string(&packed).unwrap()
+            )
         })
         .collect::<Vec<_>>()
         .join("\n")

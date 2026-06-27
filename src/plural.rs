@@ -22,6 +22,7 @@ fn cat_name(c: PluralCategory) -> &'static str {
 /// non-negative integer is captured by two 100-entry tables:
 ///   - `small[n]`   for n in 0..100 (handles exact-value rules like Arabic 0/1/2)
 ///   - `modulo[n%100]` for n >= 100 (the periodic steady state)
+///
 /// The emitted runtime is then a pure table lookup — it never calls
 /// `Intl.PluralRules`, which Hermes (React Native) doesn't implement.
 pub fn build_plural_table(tag: &str) -> Result<PluralTable> {

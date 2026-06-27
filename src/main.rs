@@ -9,7 +9,7 @@ use clap::{Parser, Subcommand};
 use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
-#[command(name = "stele", about = "JSON-first, type-safe i18n codegen")]
+#[command(name = "stele", version, about = "JSON-first, type-safe i18n codegen")]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -60,6 +60,7 @@ fn cmd_generate(config_path: PathBuf) -> Result<()> {
         };
         let emitter = emit::emitter_for(&target.lang, &opts)
             .ok_or_else(|| anyhow!("unknown target lang '{}'", target.lang))?;
+        emitter.validate(&ir)?;
         let code = emitter.emit(&ir);
         let out = base.join(&target.out);
         if let Some(parent) = out.parent() {

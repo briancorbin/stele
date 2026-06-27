@@ -14,7 +14,32 @@ pub mod ts;
 /// contributors plug in new targets.
 pub trait Emitter {
     fn emit(&self, ir: &Ir) -> String;
+
+    /// Target-specific validation run before `emit` (e.g. Swift type-name
+    /// collisions). Default: nothing extra beyond the shared `validate_idents`.
+    fn validate(&self, _ir: &Ir) -> Result<()> {
+        Ok(())
+    }
 }
+
+/// Keys that are valid identifiers but collide with JS object/prototype members.
+/// Emitting an accessor or DATA entry named any of these silently corrupts the
+/// object (prototype setter, shadowed builtin) — so reject them outright.
+const RESERVED_KEYS: &[&str] = &[
+    "__proto__",
+    "prototype",
+    "constructor",
+    "toString",
+    "toLocaleString",
+    "valueOf",
+    "hasOwnProperty",
+    "isPrototypeOf",
+    "propertyIsEnumerable",
+    "__defineGetter__",
+    "__defineSetter__",
+    "__lookupGetter__",
+    "__lookupSetter__",
+];
 
 /// Output identifier casing for generated accessors. Input keys may be authored
 /// in any case (camel / snake / kebab); the chosen output case is applied
@@ -134,6 +159,9 @@ fn check_ident(orig: &str, cased: &str) -> Result<()> {
     if !valid {
         bail!("key '{orig}' becomes '{cased}', which isn't a valid identifier");
     }
+    if RESERVED_KEYS.contains(&cased) {
+        bail!("key '{orig}' becomes '{cased}', which collides with a built-in object member — rename it");
+    }
     Ok(())
 }
 
@@ -208,5 +236,12 @@ mod tests {
     fn validate_rejects_invalid_identifiers() {
         let bad = ir(vec![leaf(&["2fa"])]);
         assert!(validate_idents(&bad, Case::Preserve).is_err());
+    }
+
+    #[test]
+    fn validate_rejects_reserved_object_keys() {
+        assert!(validate_idents(&ir(vec![leaf(&["toString"])]), Case::Camel).is_err());
+        assert!(validate_idents(&ir(vec![leaf(&["__proto__"])]), Case::Preserve).is_err());
+        assert!(validate_idents(&ir(vec![leaf(&["constructor"])]), Case::Camel).is_err());
     }
 }

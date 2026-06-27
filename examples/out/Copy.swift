@@ -3,15 +3,15 @@
 import Foundation
 
 public enum Locale: String {
-    case en
-    case es
-    case pl
+    case en = "en"
+    case es = "es"
+    case pl = "pl"
 }
 
 public struct Copy {
     let locale: Locale
     public init(_ locale: Locale) { self.locale = locale }
-    public var home: Home { Home(locale) }
+    public var home: Self.Home { Self.Home(locale) }
     public struct Home {
         let locale: Locale
         public init(_ locale: Locale) { self.locale = locale }
@@ -23,7 +23,7 @@ public struct Copy {
         }
         public var title: String { SteleData.s(locale, "home.title") }
     }
-    public var inbox: Inbox { Inbox(locale) }
+    public var inbox: Self.Inbox { Self.Inbox(locale) }
     public struct Inbox {
         let locale: Locale
         public init(_ locale: Locale) { self.locale = locale }
@@ -31,11 +31,11 @@ public struct Copy {
             SteleData.plural(locale, "inbox.unread", count, ["count": String(count)])
         }
     }
-    public var walk: Walk { Walk(locale) }
+    public var walk: Self.Walk { Self.Walk(locale) }
     public struct Walk {
         let locale: Locale
         public init(_ locale: Locale) { self.locale = locale }
-        public var cta: Cta { Cta(locale) }
+        public var cta: Self.Cta { Self.Cta(locale) }
         public struct Cta {
             let locale: Locale
             public init(_ locale: Locale) { self.locale = locale }
@@ -103,10 +103,10 @@ enum SteleData {
         }
     }
     static func pluralCategory(_ l: Locale, _ n: Int) -> String {
-        let i = abs(n)
+        let i = n.magnitude // UInt — no abs() overflow on Int.min
         let table = i < 100 ? (PCAT_SMALL[l.rawValue] ?? "") : (PCAT_MOD[l.rawValue] ?? "")
         let chars = Array(table)
-        let idx = i < 100 ? i : i % 100
+        let idx = Int(i < 100 ? i : i % 100)
         return idx < chars.count ? pcode(chars[idx]) : "other"
     }
     static func s(_ l: Locale, _ k: String) -> String {
