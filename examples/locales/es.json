@@ -13,6 +13,16 @@
     "cta": {
       "start": "Empezar paseo",
       "confirm": "Mantén pulsado para pasear a {{dogName}}"
+    },
+    "invited": {
+      "$select": {
+        "param": "gender",
+        "cases": {
+          "female": "{{name}} te invitó a pasear a su perra",
+          "male": "{{name}} te invitó a pasear a su perro",
+          "other": "{{name}} te invitó a pasear a su perro"
+        }
+      }
     }
   },
   "inbox": {

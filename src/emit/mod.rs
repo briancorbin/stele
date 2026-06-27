@@ -236,6 +236,7 @@ mod tests {
             params: vec![],
             kind: Kind::Plain,
             values: BTreeMap::new(),
+            selector: None,
         }
     }
 

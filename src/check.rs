@@ -64,12 +64,21 @@ impl Report {
     }
 }
 
-/// A flattened catalog leaf: a plain string or a `$plural`, with the placeholder
-/// names it references and (for plurals) the categories it provides.
+#[derive(PartialEq, Clone, Copy)]
+enum Kind {
+    Plain,
+    Plural,
+    Select,
+}
+
+/// A flattened catalog leaf with the placeholder names it references. For plurals
+/// `branches` holds the categories provided; for selects it holds the case names
+/// and `selector` the param driving them.
 struct Leaf {
-    plural: bool,
+    kind: Kind,
     placeholders: BTreeSet<String>,
-    forms: BTreeSet<String>,
+    branches: BTreeSet<String>,
+    selector: Option<String>,
 }
 
 const CATEGORIES: &[&str] = &["zero", "one", "two", "few", "many", "other"];
@@ -101,9 +110,10 @@ fn walk(
             leaves.insert(
                 dotted,
                 Leaf {
-                    plural: false,
+                    kind: Kind::Plain,
                     placeholders: placeholder_names(s).into_iter().collect(),
-                    forms: BTreeSet::new(),
+                    branches: BTreeSet::new(),
+                    selector: None,
                 },
             );
         } else if let Some(plural) = v.as_object().and_then(|o| o.get("$plural")) {
@@ -114,7 +124,7 @@ fn walk(
                 )),
                 Some(forms_obj) => {
                     let mut placeholders = BTreeSet::new();
-                    let mut forms = BTreeSet::new();
+                    let mut branches = BTreeSet::new();
                     for (cat, form) in forms_obj {
                         if !CATEGORIES.contains(&cat.as_str()) {
                             errors.push((
@@ -123,7 +133,7 @@ fn walk(
                             ));
                             continue;
                         }
-                        forms.insert(cat.clone());
+                        branches.insert(cat.clone());
                         match form.as_str() {
                             Some(fs) => placeholders.extend(placeholder_names(fs)),
                             None => errors.push((
@@ -132,7 +142,7 @@ fn walk(
                             )),
                         }
                     }
-                    if !forms.contains("other") {
+                    if !branches.contains("other") {
                         errors.push((
                             dotted.clone(),
                             "$plural is missing the required 'other' form".to_string(),
@@ -141,12 +151,54 @@ fn walk(
                     leaves.insert(
                         dotted,
                         Leaf {
-                            plural: true,
+                            kind: Kind::Plural,
                             placeholders,
-                            forms,
+                            branches,
+                            selector: None,
                         },
                     );
                 }
+            }
+        } else if let Some(select) = v.as_object().and_then(|o| o.get("$select")) {
+            let sobj = select.as_object();
+            let param = sobj.and_then(|o| o.get("param")).and_then(|p| p.as_str());
+            let cases = sobj
+                .and_then(|o| o.get("cases"))
+                .and_then(|c| c.as_object());
+            match (param, cases) {
+                (Some(param), Some(cases_obj)) => {
+                    let mut placeholders = BTreeSet::new();
+                    let mut branches = BTreeSet::new();
+                    for (case, form) in cases_obj {
+                        branches.insert(case.clone());
+                        match form.as_str() {
+                            Some(fs) => placeholders.extend(placeholder_names(fs)),
+                            None => errors.push((
+                                dotted.clone(),
+                                format!("select case '{case}' must be a string"),
+                            )),
+                        }
+                    }
+                    if !branches.contains("other") {
+                        errors.push((
+                            dotted.clone(),
+                            "$select is missing the required 'other' case".to_string(),
+                        ));
+                    }
+                    leaves.insert(
+                        dotted,
+                        Leaf {
+                            kind: Kind::Select,
+                            placeholders,
+                            branches,
+                            selector: Some(param.to_string()),
+                        },
+                    );
+                }
+                _ => errors.push((
+                    dotted.clone(),
+                    "$select needs a string 'param' and a 'cases' object".to_string(),
+                )),
             }
         } else if v.is_object() {
             walk(v, path, leaves, errors);
@@ -161,6 +213,14 @@ fn non_count(set: &BTreeSet<String>) -> BTreeSet<&String> {
     set.iter().filter(|p| p.as_str() != "count").collect()
 }
 
+fn kind_label(kind: Kind) -> &'static str {
+    match kind {
+        Kind::Plain => "a plain string",
+        Kind::Plural => "a $plural",
+        Kind::Select => "a $select",
+    }
+}
+
 /// Every plural in `leaves` must provide each category that `locale`'s integer
 /// CLDR rules can actually produce (e.g. Polish needs `few`/`many`), or a count
 /// hits a blank string at runtime.
@@ -172,11 +232,11 @@ fn check_plural_coverage(
     let table = build_plural_table(locale)?;
     let reachable: BTreeSet<&String> = table.small.iter().chain(table.modulo.iter()).collect();
     for (key, leaf) in leaves {
-        if !leaf.plural {
+        if leaf.kind != Kind::Plural {
             continue;
         }
         for cat in &reachable {
-            if !leaf.forms.contains(*cat) {
+            if !leaf.branches.contains(*cat) {
                 diags.push(Diagnostic::error(
                     locale,
                     key,
@@ -214,16 +274,15 @@ pub fn check(canonical: &str, locales: &BTreeMap<String, Value>) -> Result<Repor
         for (key, canon) in &canon_leaves {
             match leaves.get(key) {
                 None => diags.push(Diagnostic::error(loc, key, "missing translation")),
-                Some(leaf) if leaf.plural != canon.plural => {
-                    let (a, b) = if canon.plural {
-                        ("a $plural", "a plain string")
-                    } else {
-                        ("a plain string", "a $plural")
-                    };
+                Some(leaf) if leaf.kind != canon.kind => {
                     diags.push(Diagnostic::error(
                         loc,
                         key,
-                        format!("kind mismatch: canonical is {a}, here it's {b}"),
+                        format!(
+                            "kind mismatch: canonical is {}, here it's {}",
+                            kind_label(canon.kind),
+                            kind_label(leaf.kind)
+                        ),
                     ));
                 }
                 Some(leaf) => {
@@ -246,6 +305,35 @@ pub fn check(canonical: &str, locales: &BTreeMap<String, Value>) -> Result<Repor
                             key,
                             format!("placeholder {{{{{p}}}}} from the canonical string is not used here"),
                         ));
+                    }
+                    // For $select, the case set + selector are caller-facing and
+                    // language-independent — every locale must match the canonical.
+                    if canon.kind == Kind::Select {
+                        if leaf.selector != canon.selector {
+                            diags.push(Diagnostic::error(
+                                loc,
+                                key,
+                                format!(
+                                    "select param '{}' differs from canonical '{}'",
+                                    leaf.selector.as_deref().unwrap_or("?"),
+                                    canon.selector.as_deref().unwrap_or("?")
+                                ),
+                            ));
+                        }
+                        for c in canon.branches.difference(&leaf.branches) {
+                            diags.push(Diagnostic::error(
+                                loc,
+                                key,
+                                format!("missing select case '{c}' (the caller can pass it)"),
+                            ));
+                        }
+                        for c in leaf.branches.difference(&canon.branches) {
+                            diags.push(Diagnostic::warning(
+                                loc,
+                                key,
+                                format!("select case '{c}' is not in the canonical locale — it's unreachable"),
+                            ));
+                        }
                     }
                 }
             }
@@ -377,6 +465,49 @@ mod tests {
         )
         .unwrap();
         assert!(has_error(&r, "n", "few") || has_error(&r, "n", "many"));
+    }
+
+    #[test]
+    fn flags_missing_select_case() {
+        let r = check(
+            "en",
+            &cat(&[
+                (
+                    "en",
+                    json!({ "g": { "$select": { "param": "gender",
+                    "cases": { "female": "f", "male": "m", "other": "o" } } } }),
+                ),
+                // es drops the "female" case the caller can still pass
+                (
+                    "es",
+                    json!({ "g": { "$select": { "param": "gender",
+                    "cases": { "male": "m", "other": "o" } } } }),
+                ),
+            ]),
+        )
+        .unwrap();
+        assert!(has_error(&r, "g", "female"));
+    }
+
+    #[test]
+    fn flags_select_param_mismatch() {
+        let r = check(
+            "en",
+            &cat(&[
+                (
+                    "en",
+                    json!({ "g": { "$select": { "param": "gender",
+                    "cases": { "other": "o" } } } }),
+                ),
+                (
+                    "es",
+                    json!({ "g": { "$select": { "param": "genero",
+                    "cases": { "other": "o" } } } }),
+                ),
+            ]),
+        )
+        .unwrap();
+        assert!(has_error(&r, "g", "differs from canonical"));
     }
 
     #[test]

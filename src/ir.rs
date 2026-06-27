@@ -44,6 +44,10 @@ pub struct Message {
     pub params: Vec<Param>,
     pub kind: Kind,
     pub values: BTreeMap<String, MessageValue>,
+    /// For `Select` messages: the name of the param that drives the branch
+    /// (e.g. `gender`). `None` for plain/plural.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selector: Option<String>,
 }
 
 impl Message {
@@ -64,6 +68,9 @@ pub struct Param {
 pub enum ParamType {
     String,
     Number,
+    /// A closed set of string values (a `$select` selector, e.g. gender) — emitted
+    /// as a literal union so call sites get autocomplete and typo-checking.
+    Enum(Vec<String>),
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -71,13 +78,15 @@ pub enum ParamType {
 pub enum Kind {
     Plain,
     Plural,
+    Select,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum MessageValue {
     Plain(String),
-    Plural(BTreeMap<String, String>),
+    /// Plural categories → text, and `$select` cases → text, share this shape.
+    Branches(BTreeMap<String, String>),
 }
 
 pub fn build_ir(canonical: &str, locales: &BTreeMap<String, Value>) -> Result<Ir> {
@@ -100,7 +109,7 @@ pub fn build_ir(canonical: &str, locales: &BTreeMap<String, Value>) -> Result<Ir
             continue;
         }
         for (loc, value) in &m.values {
-            if let MessageValue::Plural(forms) = value {
+            if let MessageValue::Branches(forms) = value {
                 // Only the categories the locale's INTEGER rules actually produce
                 // (from the baked tables) — not ICU's full set, which includes
                 // compact-only categories like Spanish `many` that integers never hit.
@@ -147,14 +156,17 @@ pub fn build_ir(canonical: &str, locales: &BTreeMap<String, Value>) -> Result<Ir
     })
 }
 
-/// Collect the dotted paths of every leaf (string or `$plural`) under `node`.
+/// Collect the dotted paths of every leaf (string, `$plural`, or `$select`).
 fn collect_paths(node: &Value, prefix: &mut Vec<String>, out: &mut Vec<String>) {
     let Some(obj) = node.as_object() else {
         return;
     };
     for (k, v) in obj {
         prefix.push(k.clone());
-        if v.is_string() || v.as_object().is_some_and(|o| o.contains_key("$plural")) {
+        let is_leaf = v.is_string()
+            || v.as_object()
+                .is_some_and(|o| o.contains_key("$plural") || o.contains_key("$select"));
+        if is_leaf {
             out.push(prefix.join("."));
         } else if v.is_object() {
             collect_paths(v, prefix, out);
@@ -178,12 +190,13 @@ fn walk(
         if let Some(s) = val.as_str() {
             // plain string leaf
             let params = params_from(s);
-            let values = collect_values(path, locales, canonical, false);
+            let values = collect_values(path, locales, canonical, Shape::Plain);
             out.push(Message {
                 path: path.clone(),
                 params,
                 kind: Kind::Plain,
                 values,
+                selector: None,
             });
         } else if let Some(plural) = val.as_object().and_then(|o| o.get("$plural")) {
             // tagged plural leaf: { "$plural": { "one": ..., "other": ... } }
@@ -217,12 +230,57 @@ fn walk(
                     }
                 }
             }
-            let values = collect_values(path, locales, canonical, true);
+            let values = collect_values(path, locales, canonical, Shape::Plural);
             out.push(Message {
                 path: path.clone(),
                 params,
                 kind: Kind::Plural,
                 values,
+                selector: None,
+            });
+        } else if let Some(select) = val.as_object().and_then(|o| o.get("$select")) {
+            // tagged select leaf: { "$select": { "param": "gender", "cases": {…} } }
+            let dotted = path.join(".");
+            let sobj = select.as_object().ok_or_else(|| {
+                anyhow!("'{dotted}' $select must be an object with 'param' and 'cases'")
+            })?;
+            let param = sobj
+                .get("param")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("'{dotted}' $select needs a string 'param'"))?;
+            let cases = sobj
+                .get("cases")
+                .and_then(|v| v.as_object())
+                .ok_or_else(|| anyhow!("'{dotted}' $select needs a 'cases' object"))?;
+            if !cases.contains_key("other") {
+                return Err(anyhow!(
+                    "'{dotted}' $select is missing the required 'other' case"
+                ));
+            }
+            // The selector is a closed enum of the case keys; placeholders from any
+            // case become params too (unioned, same as plural).
+            let case_keys: Vec<String> = cases.keys().cloned().collect();
+            let mut params = vec![Param {
+                name: param.to_string(),
+                ty: ParamType::Enum(case_keys),
+            }];
+            for form in cases.values() {
+                let s = form
+                    .as_str()
+                    .ok_or_else(|| anyhow!("'{dotted}' $select case must be a string"))?;
+                for p in params_from(s) {
+                    if p.name != param && !params.iter().any(|x| x.name == p.name) {
+                        params.push(p);
+                    }
+                }
+            }
+            let values = collect_values(path, locales, canonical, Shape::Select);
+            out.push(Message {
+                path: path.clone(),
+                params,
+                kind: Kind::Select,
+                values,
+                selector: Some(param.to_string()),
             });
         } else if val.is_object() {
             // namespace
@@ -267,16 +325,35 @@ fn lookup<'a>(root: &'a Value, path: &[String]) -> Option<&'a Value> {
     Some(cur)
 }
 
-fn to_message_value(val: &Value, plural: bool) -> Option<MessageValue> {
-    if plural {
-        let m = val.as_object()?.get("$plural")?.as_object()?;
-        let forms = m
-            .iter()
+/// Which leaf shape we're collecting a locale's value for.
+#[derive(Clone, Copy)]
+enum Shape {
+    Plain,
+    Plural,
+    Select,
+}
+
+fn to_message_value(val: &Value, shape: Shape) -> Option<MessageValue> {
+    let branch_map = |obj: &serde_json::Map<String, Value>| {
+        obj.iter()
             .filter_map(|(k, v)| Some((k.clone(), normalize(v.as_str()?))))
-            .collect();
-        Some(MessageValue::Plural(forms))
-    } else {
-        Some(MessageValue::Plain(normalize(val.as_str()?)))
+            .collect()
+    };
+    match shape {
+        Shape::Plain => Some(MessageValue::Plain(normalize(val.as_str()?))),
+        Shape::Plural => {
+            let forms = val.as_object()?.get("$plural")?.as_object()?;
+            Some(MessageValue::Branches(branch_map(forms)))
+        }
+        Shape::Select => {
+            let cases = val
+                .as_object()?
+                .get("$select")?
+                .as_object()?
+                .get("cases")?
+                .as_object()?;
+            Some(MessageValue::Branches(branch_map(cases)))
+        }
     }
 }
 
@@ -286,11 +363,11 @@ fn collect_values(
     path: &[String],
     locales: &BTreeMap<String, Value>,
     canonical: &str,
-    plural: bool,
+    shape: Shape,
 ) -> BTreeMap<String, MessageValue> {
     let mut out = BTreeMap::new();
     for (loc, root) in locales {
-        let value = lookup(root, path).and_then(|v| to_message_value(v, plural));
+        let value = lookup(root, path).and_then(|v| to_message_value(v, shape));
         let resolved = match value {
             Some(v) => v,
             None => {
@@ -303,7 +380,7 @@ fn collect_values(
                     );
                 }
                 lookup(&locales[canonical], path)
-                    .and_then(|v| to_message_value(v, plural))
+                    .and_then(|v| to_message_value(v, shape))
                     .unwrap_or(MessageValue::Plain(String::new()))
             }
         };
@@ -352,6 +429,38 @@ mod tests {
         let names: Vec<_> = m.params.iter().map(|p| p.name.as_str()).collect();
         // `name` appears only in the `one` form but must still be a param.
         assert!(names.contains(&"name") && names.contains(&"count"));
+    }
+
+    #[test]
+    fn select_builds_enum_param_and_selector() {
+        let ir = build_ir(
+            "en",
+            &locale(json!({ "g": { "$select": { "param": "gender", "cases": {
+                "female": "{{name}} la invitó",
+                "male": "{{name}} lo invitó",
+                "other": "{{name}} le invitó"
+            } } } })),
+        )
+        .unwrap();
+        let m = ir.messages.iter().find(|m| m.dotted() == "g").unwrap();
+        assert_eq!(m.kind, Kind::Select);
+        assert_eq!(m.selector.as_deref(), Some("gender"));
+        // selector is an Enum of the case keys; `name` is a normal placeholder param
+        let gender = m.params.iter().find(|p| p.name == "gender").unwrap();
+        assert_eq!(
+            gender.ty,
+            ParamType::Enum(vec!["female".into(), "male".into(), "other".into()])
+        );
+        assert!(m.params.iter().any(|p| p.name == "name"));
+    }
+
+    #[test]
+    fn select_without_other_is_rejected() {
+        assert!(build_ir(
+            "en",
+            &locale(json!({ "g": { "$select": { "param": "gender", "cases": { "male": "x" } } } }))
+        )
+        .is_err());
     }
 
     #[test]

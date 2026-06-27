@@ -13,6 +13,16 @@
     "cta": {
       "start": "Start walk",
       "confirm": "Hold to confirm walking {{dogName}}"
+    },
+    "invited": {
+      "$select": {
+        "param": "gender",
+        "cases": {
+          "female": "{{name}} invited you to walk her dog",
+          "male": "{{name}} invited you to walk his dog",
+          "other": "{{name}} invited you to walk their dog"
+        }
+      }
     }
   },
   "inbox": {

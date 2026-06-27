@@ -9,13 +9,19 @@ pub struct TsEmitter {
     pub binding: Binding,
 }
 
-fn ts_type(ty: &ParamType) -> &'static str {
+fn ts_type(ty: &ParamType) -> String {
     match ty {
-        ParamType::Number => "number",
+        ParamType::Number => "number".to_string(),
         // Placeholders interpolate any stringifiable value; accepting numbers too
         // avoids spurious `String(n)` wraps at call sites (a `count`-named param
         // is the one inferred as a strict `number`).
-        ParamType::String => "string | number",
+        ParamType::String => "string | number".to_string(),
+        // A `$select` selector becomes a literal union of its case names.
+        ParamType::Enum(cases) => cases
+            .iter()
+            .map(|c| format!("\"{c}\""))
+            .collect::<Vec<_>>()
+            .join(" | "),
     }
 }
 
@@ -94,6 +100,7 @@ fn render_accessor(
     let count = case.apply("count");
     let cast_s = if typed { " as string" } else { "" };
     let cast_f = if typed { " as Forms" } else { "" };
+    let cast_c = if typed { " as Cases" } else { "" };
     branch
         .iter()
         .map(|(k, node)| {
@@ -121,6 +128,10 @@ fn render_accessor(
                         Kind::Plural => format!(
                             "{pad}{k}: {sig} => plural(locale, D[{key}]{cast_f}, a.{count}, a),"
                         ),
+                        Kind::Select => {
+                            let sel = case.apply(m.selector.as_deref().unwrap_or("value"));
+                            format!("{pad}{k}: {sig} => select(D[{key}]{cast_c}, a.{sel}, a),")
+                        }
                     }
                 }
                 Node::Branch(b) => format!(
@@ -202,10 +213,10 @@ fn build_data(ir: &Ir, case: Case) -> Value {
         for m in &ir.messages {
             let v = match m.values.get(loc) {
                 Some(MessageValue::Plain(s)) => Value::String(recase_placeholders(s, case)),
-                Some(MessageValue::Plural(forms)) => {
+                Some(MessageValue::Branches(branches)) => {
                     let mut o = Map::new();
-                    for (cat, t) in forms {
-                        o.insert(cat.clone(), Value::String(recase_placeholders(t, case)));
+                    for (k, t) in branches {
+                        o.insert(k.clone(), Value::String(recase_placeholders(t, case)));
                     }
                     Value::Object(o)
                 }
@@ -258,6 +269,12 @@ function interp(t: string, a: Record<string, string | number>): string {
 function plural(locale: Locale, forms: Forms, n: number, a: Record<string, string | number>): string {
   return interp(forms[pluralCategory(locale, n)] ?? forms.other ?? "", a);
 }
+
+type Cases = Partial<Record<string, string>>;
+
+function select(cases: Cases, value: string, a: Record<string, string | number>): string {
+  return interp(cases[value] ?? cases.other ?? "", a);
+}
 "#;
 
 // The plural runtime as plain JavaScript (no type annotations) for the package
@@ -279,6 +296,10 @@ function interp(t, a) {
 
 function plural(locale, forms, n, a) {
   return interp(forms[pluralCategory(locale, n)] ?? forms.other ?? "", a);
+}
+
+function select(cases, value, a) {
+  return interp(cases[value] ?? cases.other ?? "", a);
 }
 "#;
 
@@ -316,7 +337,7 @@ impl Emitter for TsEmitter {
         ));
         out.push_str(RUNTIME);
         out.push_str(&format!(
-            "\nconst DATA: Record<Locale, Record<string, string | Forms>> = {data};\n"
+            "\nconst DATA: Record<Locale, Record<string, string | Forms | Cases>> = {data};\n"
         ));
         out.push_str(&format!(
             "\nexport function {}(locale: Locale): {} {{\n",

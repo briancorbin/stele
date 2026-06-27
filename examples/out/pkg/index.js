@@ -30,6 +30,10 @@ function plural(locale, forms, n, a) {
   return interp(forms[pluralCategory(locale, n)] ?? forms.other ?? "", a);
 }
 
+function select(cases, value, a) {
+  return interp(cases[value] ?? cases.other ?? "", a);
+}
+
 const DATA = {
   "en": {
     "home.greeting": "Hey {{name}}, there are dogs nearby",
@@ -43,7 +47,12 @@ const DATA = {
       "other": "{{count}} unread messages"
     },
     "walk.cta.confirm": "Hold to confirm walking {{dogName}}",
-    "walk.cta.start": "Start walk"
+    "walk.cta.start": "Start walk",
+    "walk.invited": {
+      "female": "{{name}} invited you to walk her dog",
+      "male": "{{name}} invited you to walk his dog",
+      "other": "{{name}} invited you to walk their dog"
+    }
   },
   "es": {
     "home.greeting": "Hola {{name}}, hay perros cerca",
@@ -57,7 +66,12 @@ const DATA = {
       "other": "{{count}} mensajes sin leer"
     },
     "walk.cta.confirm": "Mantén pulsado para pasear a {{dogName}}",
-    "walk.cta.start": "Empezar paseo"
+    "walk.cta.start": "Empezar paseo",
+    "walk.invited": {
+      "female": "{{name}} te invitó a pasear a su perra",
+      "male": "{{name}} te invitó a pasear a su perro",
+      "other": "{{name}} te invitó a pasear a su perro"
+    }
   },
   "pl": {
     "home.greeting": "Cześć {{name}}, w pobliżu są psy",
@@ -75,7 +89,12 @@ const DATA = {
       "other": "{{count}} nieprzeczytanej wiadomości"
     },
     "walk.cta.confirm": "Przytrzymaj, aby potwierdzić spacer z {{dogName}}",
-    "walk.cta.start": "Rozpocznij spacer"
+    "walk.cta.start": "Rozpocznij spacer",
+    "walk.invited": {
+      "female": "{{name}} zaprosiła Cię na spacer",
+      "male": "{{name}} zaprosił Cię na spacer",
+      "other": "{{name}} zaprosiło Cię na spacer"
+    }
   }
 };
 
@@ -95,6 +114,7 @@ export function createStele(locale) {
         confirm: (a) => interp(D["walk.cta.confirm"], a),
         start: D["walk.cta.start"],
       },
+      invited: (a) => select(D["walk.invited"], a.gender, a),
     },
   };
 }

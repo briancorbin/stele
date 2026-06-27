@@ -351,6 +351,39 @@ stele check — 3 locales, 657 keys (canonical: en)
 ✗ check failed — 1 error(s), 1 warning(s)
 ```
 
+### Branching on gender (and other enums) — `$select`
+
+When wording varies by a *linguistic* category — grammatical gender, formality —
+use `$select`. It branches on a caller-supplied value, with `other` as the
+required fallback:
+
+```json
+{
+  "invited": {
+    "$select": {
+      "param": "gender",
+      "cases": {
+        "female": "{{name}} la invitó a pasear",
+        "male":   "{{name}} lo invitó a pasear",
+        "other":  "{{name}} le invitó a pasear"
+      }
+    }
+  }
+}
+```
+```ts
+stele.invited({ gender: "female", name: "Ana" });
+//             ^ typed as "female" | "male" | "other" — a typo is a compile error
+```
+
+The selector is emitted as a **literal union** of the case names, so call sites
+get autocomplete and exhaustiveness. `stele check` verifies every locale provides
+the same cases and the same selector (the value is caller-supplied and
+language-independent, so all locales must handle it).
+
+Keep `$select` for *language* branching — gender, formality (tú/usted). UI state
+(`isBusy ? … : …`) belongs in your code, not the catalog.
+
 ## Status
 
 Early, but real. Both emitters are verified end-to-end: the generated code compiles, runs, and rejects bad calls at compile time.
@@ -382,7 +415,8 @@ Early, but real. Both emitters are verified end-to-end: the generated code compi
       `node_modules/<name>` for a zero-repo-footprint "codegen as a dependency" setup
 - [x] `stele check` — cross-locale validation (missing/stale keys, placeholder
       drift, plural-category coverage, kind mismatches); non-zero exit for CI
-- [ ] `$select` (gender / arbitrary branching)
+- [x] `$select` — linguistic branching (gender / formality) as a literal-union
+      param; cross-locale case consistency enforced by `stele check`
 - [ ] More emitters (Kotlin, Go, Rust, Java)
 
 ## License

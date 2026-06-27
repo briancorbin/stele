@@ -12,6 +12,9 @@ fn swift_type(ty: &ParamType) -> &'static str {
     match ty {
         ParamType::Number => "Int",
         ParamType::String => "String",
+        // A `$select` selector is a plain String in Swift (the closed-set safety
+        // is a TypeScript-only nicety; Swift takes the raw case value).
+        ParamType::Enum(_) => "String",
     }
 }
 
@@ -156,7 +159,8 @@ fn arg_dict(m: &Message, case: Case) -> String {
             let ident = swift_ident(&name);
             let val = match p.ty {
                 ParamType::Number => format!("String({ident})"),
-                ParamType::String => ident,
+                // selector (Enum) is already a String; pass through like String
+                ParamType::String | ParamType::Enum(_) => ident,
             };
             format!("{}: {val}", swift_lit(&name))
         })
@@ -214,6 +218,15 @@ fn render_leaf(k: &str, m: &Message, case: Case) -> String {
             swift_ident(&case.apply("count")),
             arg_dict(m, case)
         ),
+        Kind::Select => {
+            let sel = m.selector.as_deref().unwrap_or("value");
+            format!(
+                "public func {k}({}) -> String {{\n    SteleData.select(locale, {key}, {}, {})\n}}",
+                sig(m, case),
+                swift_ident(&case.apply(sel)),
+                arg_dict(m, case)
+            )
+        }
     }
 }
 
@@ -239,19 +252,21 @@ fn render_struct(name: &str, branch: &BTreeMap<String, Node>, case: Case) -> Str
     )
 }
 
-fn dict_block(label: &str, ir: &Ir, plural: bool, case: Case) -> String {
+// `branches` selects the dict: plain strings (STRINGS) when false, or the
+// category/case → text maps shared by plural and select (BRANCHES) when true.
+fn dict_block(label: &str, ir: &Ir, branches: bool, case: Case) -> String {
     let mut blocks = Vec::new();
     for loc in &ir.locales {
         let entries: Vec<String> = ir
             .messages
             .iter()
-            .filter_map(|m| match (plural, m.values.get(loc)) {
+            .filter_map(|m| match (branches, m.values.get(loc)) {
                 (false, Some(MessageValue::Plain(v))) => Some(format!(
                     "            {}: {},",
                     swift_lit(&m.dotted()),
                     swift_lit(&recase_placeholders(v, case))
                 )),
-                (true, Some(MessageValue::Plural(forms))) => {
+                (true, Some(MessageValue::Branches(forms))) => {
                     let inner = forms
                         .iter()
                         .map(|(c, t)| {
@@ -327,9 +342,14 @@ const HELPERS: &str = r#"
         return out
     }
     static func plural(_ l: Locale, _ k: String, _ n: Int, _ a: [String: String]) -> String {
-        let forms = PLURALS[l.rawValue]?[k]
+        let forms = BRANCHES[l.rawValue]?[k]
         let cat = pluralCategory(l, n)
         let t = forms?[cat] ?? forms?["other"] ?? ""
+        return interp(t, a)
+    }
+    static func select(_ l: Locale, _ k: String, _ value: String, _ a: [String: String]) -> String {
+        let cases = BRANCHES[l.rawValue]?[k]
+        let t = cases?[value] ?? cases?["other"] ?? ""
         return interp(t, a)
     }"#;
 
@@ -398,8 +418,8 @@ impl Emitter for SwiftEmitter {
             .join("\n");
 
         let strings = dict_block("STRINGS: [String: [String: String]]", ir, false, self.case);
-        let plurals = dict_block(
-            "PLURALS: [String: [String: [String: String]]]",
+        let branches = dict_block(
+            "BRANCHES: [String: [String: [String: String]]]",
             ir,
             true,
             self.case,
@@ -416,7 +436,7 @@ impl Emitter for SwiftEmitter {
         out.push_str("\n\nenum SteleData {\n");
         out.push_str(&strings);
         out.push('\n');
-        out.push_str(&plurals);
+        out.push_str(&branches);
         out.push('\n');
         out.push_str(&pcat_small);
         out.push('\n');

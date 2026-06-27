@@ -44,6 +44,9 @@ public struct Stele {
             }
             public var start: String { SteleData.s(locale, "walk.cta.start") }
         }
+        public func invited(gender: String, name: String) -> String {
+            SteleData.select(locale, "walk.invited", gender, ["gender": gender, "name": name])
+        }
     }
 }
 
@@ -68,18 +71,21 @@ enum SteleData {
             "walk.cta.start": "Rozpocznij spacer",
         ],
     ]
-    static let PLURALS: [String: [String: [String: String]]] = [
+    static let BRANCHES: [String: [String: [String: String]]] = [
         "en": [
             "home.nearby": ["one": "{{count}} dog within {{radius}} of you", "other": "{{count}} dogs within {{radius}} of you"],
             "inbox.unread": ["one": "{{count}} unread message", "other": "{{count}} unread messages"],
+            "walk.invited": ["female": "{{name}} invited you to walk her dog", "male": "{{name}} invited you to walk his dog", "other": "{{name}} invited you to walk their dog"],
         ],
         "es": [
             "home.nearby": ["one": "{{count}} perro a {{radius}} de ti", "other": "{{count}} perros a {{radius}} de ti"],
             "inbox.unread": ["one": "{{count}} mensaje sin leer", "other": "{{count}} mensajes sin leer"],
+            "walk.invited": ["female": "{{name}} te invitó a pasear a su perra", "male": "{{name}} te invitó a pasear a su perro", "other": "{{name}} te invitó a pasear a su perro"],
         ],
         "pl": [
             "home.nearby": ["few": "{{count}} psy w odległości {{radius}} od Ciebie", "many": "{{count}} psów w odległości {{radius}} od Ciebie", "one": "{{count}} pies w odległości {{radius}} od Ciebie", "other": "{{count}} psa w odległości {{radius}} od Ciebie"],
             "inbox.unread": ["few": "{{count}} nieprzeczytane wiadomości", "many": "{{count}} nieprzeczytanych wiadomości", "one": "{{count}} nieprzeczytana wiadomość", "other": "{{count}} nieprzeczytanej wiadomości"],
+            "walk.invited": ["female": "{{name}} zaprosiła Cię na spacer", "male": "{{name}} zaprosił Cię na spacer", "other": "{{name}} zaprosiło Cię na spacer"],
         ],
     ]
     static let PCAT_SMALL: [String: String] = [
@@ -118,9 +124,14 @@ enum SteleData {
         return out
     }
     static func plural(_ l: Locale, _ k: String, _ n: Int, _ a: [String: String]) -> String {
-        let forms = PLURALS[l.rawValue]?[k]
+        let forms = BRANCHES[l.rawValue]?[k]
         let cat = pluralCategory(l, n)
         let t = forms?[cat] ?? forms?["other"] ?? ""
+        return interp(t, a)
+    }
+    static func select(_ l: Locale, _ k: String, _ value: String, _ a: [String: String]) -> String {
+        let cases = BRANCHES[l.rawValue]?[k]
+        let t = cases?[value] ?? cases?["other"] ?? ""
         return interp(t, a)
     }
 }

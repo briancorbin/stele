@@ -15,6 +15,16 @@
     "cta": {
       "start": "Rozpocznij spacer",
       "confirm": "Przytrzymaj, aby potwierdzić spacer z {{dogName}}"
+    },
+    "invited": {
+      "$select": {
+        "param": "gender",
+        "cases": {
+          "female": "{{name}} zaprosiła Cię na spacer",
+          "male": "{{name}} zaprosił Cię na spacer",
+          "other": "{{name}} zaprosiło Cię na spacer"
+        }
+      }
     }
   },
   "inbox": {

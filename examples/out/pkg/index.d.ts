@@ -17,6 +17,7 @@ export interface Stele {
       confirm: (a: { dogName: string | number }) => string;
       start: string;
     };
+    invited: (a: { gender: "female" | "male" | "other"; name: string | number }) => string;
   };
 }
 

@@ -17,6 +17,7 @@ export interface Stele {
       confirm: (a: { dogName: string | number }) => string;
       start: string;
     };
+    invited: (a: { gender: "female" | "male" | "other"; name: string | number }) => string;
   };
 }
 
@@ -53,7 +54,13 @@ function plural(locale: Locale, forms: Forms, n: number, a: Record<string, strin
   return interp(forms[pluralCategory(locale, n)] ?? forms.other ?? "", a);
 }
 
-const DATA: Record<Locale, Record<string, string | Forms>> = {
+type Cases = Partial<Record<string, string>>;
+
+function select(cases: Cases, value: string, a: Record<string, string | number>): string {
+  return interp(cases[value] ?? cases.other ?? "", a);
+}
+
+const DATA: Record<Locale, Record<string, string | Forms | Cases>> = {
   "en": {
     "home.greeting": "Hey {{name}}, there are dogs nearby",
     "home.nearby": {
@@ -66,7 +73,12 @@ const DATA: Record<Locale, Record<string, string | Forms>> = {
       "other": "{{count}} unread messages"
     },
     "walk.cta.confirm": "Hold to confirm walking {{dogName}}",
-    "walk.cta.start": "Start walk"
+    "walk.cta.start": "Start walk",
+    "walk.invited": {
+      "female": "{{name}} invited you to walk her dog",
+      "male": "{{name}} invited you to walk his dog",
+      "other": "{{name}} invited you to walk their dog"
+    }
   },
   "es": {
     "home.greeting": "Hola {{name}}, hay perros cerca",
@@ -80,7 +92,12 @@ const DATA: Record<Locale, Record<string, string | Forms>> = {
       "other": "{{count}} mensajes sin leer"
     },
     "walk.cta.confirm": "Mantén pulsado para pasear a {{dogName}}",
-    "walk.cta.start": "Empezar paseo"
+    "walk.cta.start": "Empezar paseo",
+    "walk.invited": {
+      "female": "{{name}} te invitó a pasear a su perra",
+      "male": "{{name}} te invitó a pasear a su perro",
+      "other": "{{name}} te invitó a pasear a su perro"
+    }
   },
   "pl": {
     "home.greeting": "Cześć {{name}}, w pobliżu są psy",
@@ -98,7 +115,12 @@ const DATA: Record<Locale, Record<string, string | Forms>> = {
       "other": "{{count}} nieprzeczytanej wiadomości"
     },
     "walk.cta.confirm": "Przytrzymaj, aby potwierdzić spacer z {{dogName}}",
-    "walk.cta.start": "Rozpocznij spacer"
+    "walk.cta.start": "Rozpocznij spacer",
+    "walk.invited": {
+      "female": "{{name}} zaprosiła Cię na spacer",
+      "male": "{{name}} zaprosił Cię na spacer",
+      "other": "{{name}} zaprosiło Cię na spacer"
+    }
   }
 };
 
@@ -118,6 +140,7 @@ export function createStele(locale: Locale): Stele {
         confirm: (a: { dogName: string | number }) => interp(D["walk.cta.confirm"] as string, a),
         start: D["walk.cta.start"] as string,
       },
+      invited: (a: { gender: "female" | "male" | "other"; name: string | number }) => select(D["walk.invited"] as Cases, a.gender, a),
     },
   };
 }
