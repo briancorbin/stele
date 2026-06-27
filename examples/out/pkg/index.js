@@ -98,7 +98,7 @@ const DATA = {
   }
 };
 
-export function createStele(locale) {
+function createStele(locale) {
   const D = DATA[locale];
   return {
     home: {
@@ -118,3 +118,5 @@ export function createStele(locale) {
     },
   };
 }
+
+module.exports = { createStele };

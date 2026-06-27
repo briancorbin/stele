@@ -306,9 +306,16 @@ import { getStele, initLocale } from "@myapp/copy/store";
 ```
 
 Stele emits the `.js` and `.d.ts` **directly** — no `tsc` in the loop, it stays
-one binary. `tsc` trusts the `.d.ts`, and the package resolves by name through its
-`exports` map (`.`, `./store`, `./react`). A generated example lives in
+one binary. The `.js` is **CommonJS**, so React Native / Metro / Jest consume it
+from `node_modules` with **zero config** (ESM there would need
+`transformIgnorePatterns` allowlisting); ESM and bundler consumers still `import`
+it via interop. `tsc` trusts the `.d.ts`, and the package resolves by name through
+its `exports` map (`.`, `./store`, `./react`). A generated example lives in
 [`examples/out/pkg/`](examples/out/pkg/).
+
+> CommonJS — not dual CJS+ESM — is deliberate: the locale store is a stateful
+> singleton, and a dual package risks loading it twice (the dual-package hazard),
+> forking the active locale. One format, one store.
 
 > **`node_modules` is the package manager's turf.** `npm` / `pnpm` / `yarn install`
 > prune directories they didn't create, so you must regenerate on `postinstall`.

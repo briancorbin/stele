@@ -60,11 +60,12 @@ fn package_json(o: &PackageOptions, want_store: bool) -> String {
     if o.react {
         exports.push(subpath("\"./react\"", "./react.js", "./react.d.ts"));
     }
-    // Hand-formatted (not serde) to keep field + condition order deterministic
-    // without pulling `preserve_order` in globally (which would disturb the
-    // sorted DATA output elsewhere). String values are JSON-escaped.
+    // No `"type": "module"` → CommonJS, so RN / Metro / Jest consume it from
+    // node_modules with zero config. Hand-formatted (not serde) to keep field +
+    // condition order deterministic without pulling `preserve_order` in globally
+    // (which would disturb the sorted DATA output elsewhere). Values JSON-escaped.
     format!(
-        "{{\n  \"name\": {},\n  \"version\": {},\n  \"type\": \"module\",\n  \"main\": \"./index.js\",\n  \"types\": \"./index.d.ts\",\n  \"exports\": {{\n{}\n  }}\n}}\n",
+        "{{\n  \"name\": {},\n  \"version\": {},\n  \"main\": \"./index.js\",\n  \"types\": \"./index.d.ts\",\n  \"exports\": {{\n{}\n  }}\n}}\n",
         serde_json::to_string(&o.name).unwrap(),
         serde_json::to_string(&o.version).unwrap(),
         exports.join(",\n"),
@@ -162,7 +163,10 @@ mod tests {
     fn core_js_is_runtime_only_no_types() {
         let files = render(&ir(), &opts(false, false));
         let js = &files.iter().find(|(n, _)| n == "index.js").unwrap().1;
-        assert!(js.contains("export function createStele(locale) {"));
+        // CommonJS, not ESM (zero-config for RN/Metro/Jest)
+        assert!(js.contains("function createStele(locale) {"));
+        assert!(js.contains("module.exports = { createStele };"));
+        assert!(!js.contains("export ")); // no ESM export keyword
         assert!(!js.contains(": Locale")); // no type annotations leaked into .js
         assert!(!js.contains("export interface"));
         let dts = &files.iter().find(|(n, _)| n == "index.d.ts").unwrap().1;

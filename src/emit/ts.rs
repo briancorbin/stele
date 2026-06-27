@@ -194,14 +194,18 @@ pub fn core_js(ir: &Ir, callable: bool, case: Case, binding: &Binding) -> String
     out.push_str(&format!("const PCAT_MOD = {{\n{}\n}};\n", pack(ir, true)));
     out.push_str(RUNTIME_JS);
     out.push_str(&format!("\nconst DATA = {data};\n"));
-    out.push_str(&format!(
-        "\nexport function {}(locale) {{\n",
-        binding.factory()
-    ));
+    // CommonJS — RN / Metro / Jest consume CJS from node_modules with zero config
+    // (ESM there needs transformIgnorePatterns allowlisting). ESM/bundler consumers
+    // still `import` it fine via interop.
+    out.push_str(&format!("\nfunction {}(locale) {{\n", binding.factory()));
     out.push_str("  const D = DATA[locale];\n");
     out.push_str(&format!(
         "  return {{\n{}\n  }};\n}}\n",
         render_accessor(&tree, 2, callable, case, false)
+    ));
+    out.push_str(&format!(
+        "\nmodule.exports = {{ {} }};\n",
+        binding.factory()
     ));
     out
 }
