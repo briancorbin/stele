@@ -233,6 +233,15 @@ fn walk(
     Ok(())
 }
 
+/// The placeholder names referenced in a string, in order, with duplicates kept.
+/// Single source of the `{{name}}` extraction, shared with `stele check`.
+pub fn placeholder_names(s: &str) -> Vec<String> {
+    PLACEHOLDER
+        .captures_iter(s)
+        .map(|c| c[1].to_string())
+        .collect()
+}
+
 fn params_from(s: &str) -> Vec<Param> {
     let mut seen: Vec<Param> = Vec::new();
     for cap in PLACEHOLDER.captures_iter(s) {

@@ -28,3 +28,5 @@ jobs:
             echo "::error::examples/ is stale — run 'stele generate' and commit the result"
             exit 1
           fi
+      - name: Catalog passes check
+        run: cargo run --release -- check --strict

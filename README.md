@@ -106,6 +106,7 @@ Point `stele` at a config and generate, then commit the output and import it.
 
 ```bash
 stele generate                   # reads ./stele.toml
+stele check                      # validate the catalog across locales (CI gate)
 stele ir --locales locales --canonical en   # inspect the IR
 ```
 
@@ -316,6 +317,40 @@ one binary. `tsc` trusts the `.d.ts`, and the package resolves by name through i
 > your setup fights it, point `out` at a gitignored folder and add one resolver
 > alias instead — same artifact, different home.
 
+### Validate the catalog — `stele check`
+
+Generation makes the *current* locale type-safe; `stele check` keeps the whole
+catalog honest as you add locales. It compares every locale against the canonical
+one and exits non-zero on problems — wire it into CI:
+
+```bash
+stele check            # errors fail; warnings don't
+stele check --strict   # warnings fail too
+```
+
+It catches:
+
+- **missing translations** — a canonical key absent in another locale *(error)*
+- **placeholder drift** — `{{nombre}}` where the canonical says `{{name}}` would
+  be `undefined` at runtime *(error)*; a canonical placeholder a translation drops
+  *(warning)*
+- **plural-coverage gaps** — a locale missing a category its CLDR rules require
+  (`few`/`many` for Polish, …), which would render a blank string *(error)*
+- **kind mismatches** — a key that's a plain string in one locale and a `$plural`
+  in another *(error)*
+- **malformed `$plural`** and **stale keys** not in the canonical locale
+
+```
+stele check — 3 locales, 657 keys (canonical: en)
+
+  ✓ en
+  ✗ es — 1 error(s), 1 warning(s)
+      error    home.greeting  —  placeholder {{nombre}} is not in the canonical string — it will be undefined at runtime
+      warning  home.tagline   —  key is not in the canonical locale — it will be ignored
+
+✗ check failed — 1 error(s), 1 warning(s)
+```
+
 ## Status
 
 Early, but real. Both emitters are verified end-to-end: the generated code compiles, runs, and rejects bad calls at compile time.
@@ -345,9 +380,10 @@ Early, but real. Both emitters are verified end-to-end: the generated code compi
 - [x] Node package output (`[package]`) — compiled `.js` + `.d.ts` + `package.json`
       (import-by-name, `exports` map) instead of loose `.ts`; emit into
       `node_modules/<name>` for a zero-repo-footprint "codegen as a dependency" setup
-- [ ] More emitters (Kotlin, Go, Rust, Java)
+- [x] `stele check` — cross-locale validation (missing/stale keys, placeholder
+      drift, plural-category coverage, kind mismatches); non-zero exit for CI
 - [ ] `$select` (gender / arbitrary branching)
-- [ ] Validate `$plural` coverage against each locale's CLDR category set
+- [ ] More emitters (Kotlin, Go, Rust, Java)
 
 ## License
 
