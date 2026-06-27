@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Context, Result};
+use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
+use std::fmt;
 use std::path::Path;
 
 /// Load locales from `dir`. Two layouts are supported and may be mixed:
@@ -47,7 +49,79 @@ fn name_of(path: &Path) -> String {
 
 fn parse_json(path: &Path) -> Result<Value> {
     let text = std::fs::read_to_string(path)?;
-    serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))
+    let mut de = serde_json::Deserializer::from_str(&text);
+    let NoDupValue(value) =
+        NoDupValue::deserialize(&mut de).with_context(|| format!("parsing {}", path.display()))?;
+    de.end()
+        .with_context(|| format!("parsing {}", path.display()))?;
+    Ok(value)
+}
+
+/// A `serde_json::Value` that rejects duplicate object keys instead of silently
+/// keeping the last one — so a translator pasting a key twice in one file is a
+/// loud error, matching the cross-file collision guarantee. serde_json still does
+/// all the parsing; this only intercepts how objects are assembled.
+struct NoDupValue(Value);
+
+impl<'de> Deserialize<'de> for NoDupValue {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        d.deserialize_any(NoDupVisitor)
+    }
+}
+
+struct NoDupVisitor;
+
+impl<'de> Visitor<'de> for NoDupVisitor {
+    type Value = NoDupValue;
+
+    fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("any valid JSON value")
+    }
+
+    fn visit_bool<E: de::Error>(self, v: bool) -> Result<Self::Value, E> {
+        Ok(NoDupValue(Value::Bool(v)))
+    }
+    fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
+        Ok(NoDupValue(Value::Number(v.into())))
+    }
+    fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
+        Ok(NoDupValue(Value::Number(v.into())))
+    }
+    fn visit_f64<E: de::Error>(self, v: f64) -> Result<Self::Value, E> {
+        Ok(NoDupValue(
+            serde_json::Number::from_f64(v).map_or(Value::Null, Value::Number),
+        ))
+    }
+    fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+        Ok(NoDupValue(Value::String(v.to_owned())))
+    }
+    fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> {
+        Ok(NoDupValue(Value::Null))
+    }
+    fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+        Ok(NoDupValue(Value::Null))
+    }
+    fn visit_some<D: Deserializer<'de>>(self, d: D) -> Result<Self::Value, D::Error> {
+        NoDupValue::deserialize(d)
+    }
+    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+        let mut items = Vec::new();
+        while let Some(NoDupValue(v)) = seq.next_element()? {
+            items.push(v);
+        }
+        Ok(NoDupValue(Value::Array(items)))
+    }
+    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+        let mut obj = Map::new();
+        while let Some(key) = map.next_key::<String>()? {
+            let NoDupValue(value) = map.next_value()?;
+            if obj.contains_key(&key) {
+                return Err(de::Error::custom(format!("duplicate key '{key}'")));
+            }
+            obj.insert(key, value);
+        }
+        Ok(NoDupValue(Value::Object(obj)))
+    }
 }
 
 /// Recursively read every `*.json` under `dir`, nesting each file's content at a
@@ -137,6 +211,13 @@ fn deep_merge(into: &mut Value, from: Value) -> Result<()> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn rejects_duplicate_keys_in_one_file() {
+        assert!(serde_json::from_str::<NoDupValue>(r#"{"x":1,"x":2}"#).is_err());
+        assert!(serde_json::from_str::<NoDupValue>(r#"{"a":{"b":1,"b":2}}"#).is_err());
+        assert!(serde_json::from_str::<NoDupValue>(r#"{"a":1,"b":2}"#).is_ok());
+    }
 
     #[test]
     fn insert_nests_by_path_segments() {
