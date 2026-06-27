@@ -3,13 +3,13 @@ locales = "examples/locales"
 
 [[target]]
 lang = "typescript"
-out = "examples/out/copy.gen.ts"
+out = "examples/out/stele.gen.ts"
 
 [[target]]
 lang = "swift"
-out = "examples/out/Copy.swift"
+out = "examples/out/Stele.swift"
 
 [[target]]
 lang = "react"
-out = "examples/out/copy.react.ts"
-core = "./copy.gen"
+out = "examples/out/stele.react.ts"
+core = "./stele.gen"

@@ -1,4 +1,4 @@
-use super::{cat_char, recase_placeholders, Case, Emitter};
+use super::{cat_char, recase_placeholders, Binding, Case, Emitter};
 use crate::ir::{Ir, Kind, Message, MessageValue, ParamType};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 pub struct TsEmitter {
     pub callable: bool,
     pub case: Case,
+    pub binding: Binding,
 }
 
 fn ts_type(ty: &ParamType) -> &'static str {
@@ -208,7 +209,8 @@ impl Emitter for TsEmitter {
         out.push_str("// Source of truth: locales/*.json\n\n");
         out.push_str(&format!("export type Locale = {locale_union};\n\n"));
         out.push_str(&format!(
-            "export interface Copy {{\n{}\n}}\n",
+            "export interface {} {{\n{}\n}}\n",
+            self.binding.ty,
             render_type(&tree, 1, self.callable, self.case)
         ));
         out.push_str(&format!(
@@ -223,7 +225,11 @@ impl Emitter for TsEmitter {
         out.push_str(&format!(
             "\nconst DATA: Record<Locale, Record<string, string | Forms>> = {data};\n"
         ));
-        out.push_str("\nexport function createCopy(locale: Locale): Copy {\n");
+        out.push_str(&format!(
+            "\nexport function {}(locale: Locale): {} {{\n",
+            self.binding.factory(),
+            self.binding.ty
+        ));
         out.push_str("  const D = DATA[locale];\n");
         out.push_str(&format!(
             "  return {{\n{}\n  }};\n}}\n",

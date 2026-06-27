@@ -1,10 +1,11 @@
-use super::{cat_char, recase_placeholders, Case, Emitter};
+use super::{cat_char, recase_placeholders, Binding, Case, Emitter};
 use crate::ir::{Ir, Kind, Message, MessageValue, ParamType};
 use anyhow::{bail, Result};
 use std::collections::{BTreeMap, HashMap};
 
 pub struct SwiftEmitter {
     pub case: Case,
+    pub binding: Binding,
 }
 
 fn swift_type(ty: &ParamType) -> &'static str {
@@ -332,9 +333,10 @@ const HELPERS: &str = r#"
         return interp(t, a)
     }"#;
 
-// Type names Stele emits or Swift reserves — a namespace must not collide with these.
+// Type names Stele emits or Swift reserves — a namespace must not collide with
+// these. The root copy type (`Stele` by default, configurable) is checked
+// separately against the active binding.
 const RESERVED_TYPES: &[&str] = &[
-    "Copy",
     "Locale",
     "SteleData",
     "String",
@@ -365,7 +367,7 @@ impl Emitter for SwiftEmitter {
                 let parent = m.path[..i].to_vec();
                 let seg = &m.path[i];
                 let ty = Case::Pascal.apply(seg);
-                if RESERVED_TYPES.contains(&ty.as_str()) {
+                if ty == self.binding.ty || RESERVED_TYPES.contains(&ty.as_str()) {
                     bail!("namespace '{seg}' becomes Swift type '{ty}', which collides with a built-in or emitted type — rename it");
                 }
                 let group = groups.entry(parent).or_default();
@@ -410,7 +412,7 @@ impl Emitter for SwiftEmitter {
         out.push_str("// Source of truth: locales/*.json\n");
         out.push_str("import Foundation\n\n");
         out.push_str(&format!("public enum Locale: String {{\n{cases}\n}}\n\n"));
-        out.push_str(&render_struct("Copy", &tree, self.case));
+        out.push_str(&render_struct(&self.binding.ty, &tree, self.case));
         out.push_str("\n\nenum SteleData {\n");
         out.push_str(&strings);
         out.push('\n');

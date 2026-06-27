@@ -24,4 +24,9 @@ pub struct Target {
     /// Output identifier case: `camel` (default), `snake`, `pascal`, or
     /// `preserve`. Input keys may be in any case; this picks the output.
     pub case: Option<String>,
+    /// The brand name the generated API is built around. Defaults to `stele`,
+    /// giving the type `Stele`, the factory `createStele`, and (react target)
+    /// `useStele` / `SteleProvider`. Set to e.g. `copy` for the classic
+    /// `Copy` / `createCopy` / `useCopy` names.
+    pub binding: Option<String>,
 }

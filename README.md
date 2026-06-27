@@ -46,19 +46,21 @@ Run `stele generate`, and call into it with full autocomplete and compile-time s
 
 **TypeScript**
 ```ts
-const copy = createCopy("en");
-copy.home.title;                              // "Sidewalk"
-copy.home.greeting({ name: "Brian" });        // typed; { nmae } is a compile error
-copy.home.nearby({ count: 3, radius: "200m" });
+const stele = createStele("en");
+stele.home.title;                              // "Sidewalk"
+stele.home.greeting({ name: "Brian" });        // typed; { nmae } is a compile error
+stele.home.nearby({ count: 3, radius: "200m" });
 ```
 
 **Swift**
 ```swift
-let copy = Copy(.en)
-copy.home.title                               // "Sidewalk"
-copy.home.greeting(name: "Brian")             // idiomatic labeled args
-copy.home.nearby(count: 3, radius: "200m")
+let stele = Stele(.en)
+stele.home.title                               // "Sidewalk"
+stele.home.greeting(name: "Brian")             // idiomatic labeled args
+stele.home.nearby(count: 3, radius: "200m")
 ```
+
+The accessor is named `stele` by default — `import { stele }` and call `stele.home.greeting(...)`, the way you `import { z } from "zod"` and write `z.string()`. One config line (`binding`) renames it to whatever you like (`copy`, `t`, …), uniformly across every target.
 
 Same catalog. Same structure. Each target gets the shape a native of that language expects — and in both, a typo'd parameter, a missing argument, a nonexistent key, or a wrong type is a **compile error**, not a runtime surprise.
 
@@ -115,13 +117,14 @@ locales   = "locales"
 
 [[target]]
 lang = "typescript"
-out  = "src/copy.gen.ts"
+out  = "src/stele.gen.ts"
 # callable = true               # emit no-arg leaves as () => "..." thunks
 # case = "camel"                # output identifier case (see below)
+# binding = "stele"             # brand name for the API (see below)
 
 [[target]]
 lang = "swift"
-out  = "Sources/Copy.swift"
+out  = "Sources/Stele.swift"
 ```
 
 ### Locale layout
@@ -132,10 +135,10 @@ becomes the namespace, so you organize copy however your app is organized:
 ```
 locales/
   en/
-    nav.json            →  copy.nav.*
+    nav.json            →  stele.nav.*
     walker/
-      today.json        →  copy.walker.today.*
-      schedule.json     →  copy.walker.schedule.*
+      today.json        →  stele.walker.today.*
+      schedule.json     →  stele.walker.schedule.*
   es/
     nav.json
     ...
@@ -153,14 +156,30 @@ applied uniformly to namespaces, leaves, and params:
 
 | `case` | `walker_today` → | param `first_name` → |
 |---|---|---|
-| `camel` (default) | `copy.walkerToday` | `{ firstName }` |
-| `snake` | `copy.walker_today` | `{ first_name }` |
-| `pascal` | `copy.WalkerToday` | `{ FirstName }` |
+| `camel` (default) | `stele.walkerToday` | `{ firstName }` |
+| `snake` | `stele.walker_today` | `{ first_name }` |
+| `pascal` | `stele.WalkerToday` | `{ FirstName }` |
 | `preserve` | verbatim | verbatim |
 
 If two keys collapse to the same name under the chosen case (`dog_count` and
 `dogCount`), or a key isn't a valid identifier (`2fa`), generation fails loudly
 rather than emitting broken or silently-clobbered code.
+
+### API binding name
+
+The generated API is branded `stele` by default — the accessor type is `Stele`,
+the factory is `createStele`, and the `react` target exports `useStele` /
+`SteleProvider`. The `binding` option on a target renames that whole surface with
+one word, applied uniformly across every language:
+
+| `binding` | TypeScript / Swift | React |
+|---|---|---|
+| `stele` (default) | `createStele` / `Stele` | `useStele`, `SteleProvider` |
+| `copy` | `createCopy` / `Copy` | `useCopy`, `CopyProvider` |
+| `t` | `createT` / `T` | `useT`, `TProvider` |
+
+It's purely cosmetic — the emitted code is identical apart from those names — so a
+team can pick the word that reads best at their call sites without any lock-in.
 
 Wire it into your build so it can't drift:
 
@@ -177,30 +196,30 @@ A worked example — input, config, and generated output for both languages — 
 
 The core output stays zero-runtime and framework-agnostic. Add a `react` target
 to *also* emit reactive bindings — a tiny generated file that wraps the core in a
-Context, so changing the locale re-renders every `useCopy()` consumer. Works the
+Context, so changing the locale re-renders every `useStele()` consumer. Works the
 same on web React and React Native (it's `createElement` + hooks, no JSX build).
 
 ```toml
 [[target]]
 lang = "typescript"
-out  = "src/copy.gen.ts"
+out  = "src/stele.gen.ts"
 
 [[target]]
 lang = "react"
-out  = "src/copy.react.ts"
-core = "./copy.gen"          # import path to the typescript target's output
+out  = "src/stele.react.ts"
+core = "./stele.gen"         # import path to the typescript target's output
 ```
 
 ```tsx
-import { CopyProvider, useCopy, useLocale } from "./copy.react";
+import { SteleProvider, useStele, useLocale } from "./stele.react";
 
 // at the root:
-<CopyProvider locale="en"><App /></CopyProvider>;
+<SteleProvider locale="en"><App /></SteleProvider>;
 
 // in a component — re-renders when the locale changes:
-const copy = useCopy();
+const stele = useStele();
 const [locale, setLocale] = useLocale();
-return <Text onPress={() => setLocale("es")}>{copy.home.greeting({ name })}</Text>;
+return <Text onPress={() => setLocale("es")}>{stele.home.greeting({ name })}</Text>;
 ```
 
 ## Status
@@ -217,10 +236,11 @@ Early, but real. Both emitters are verified end-to-end: the generated code compi
 - [x] Distribution — native binary via npm (`@stelegen/cli`) and crates.io (`stelegen`),
       cross-compiled for macOS/Linux/Windows by CI on each tag
 - [x] Multi-file / folder locales (path-as-namespace, deep-merged)
-- [x] React / React Native bindings (`react` target) — reactive `useCopy` /
-      `useLocale` / `CopyProvider`, locale change re-renders consumers
+- [x] React / React Native bindings (`react` target) — reactive `useStele` /
+      `useLocale` / `SteleProvider`, locale change re-renders consumers
 - [x] `{{name}}` placeholders (double-brace, whitespace tolerant, literal-`{}`-safe)
 - [x] Any-input / chosen-output key casing (`case` option) with collision + invalid-id checks
+- [x] Configurable API binding name (`binding` option) — `stele.*` by default, one word renames the whole surface
 - [ ] More emitters (Kotlin, Go, Rust, Java)
 - [ ] `$select` (gender / arbitrary branching)
 - [ ] Validate `$plural` coverage against each locale's CLDR category set

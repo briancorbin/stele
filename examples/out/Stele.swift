@@ -8,7 +8,7 @@ public enum Locale: String {
     case pl = "pl"
 }
 
-public struct Copy {
+public struct Stele {
     let locale: Locale
     public init(_ locale: Locale) { self.locale = locale }
     public var home: Self.Home { Self.Home(locale) }

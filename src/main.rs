@@ -57,6 +57,7 @@ fn cmd_generate(config_path: PathBuf) -> Result<()> {
                 .clone()
                 .unwrap_or_else(|| "./copy.gen".to_string()),
             case,
+            binding: emit::Binding::new(target.binding.as_deref().unwrap_or("stele")),
         };
         let emitter = emit::emitter_for(&target.lang, &opts)
             .ok_or_else(|| anyhow!("unknown target lang '{}'", target.lang))?;

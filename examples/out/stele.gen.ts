@@ -3,7 +3,7 @@
 
 export type Locale = "en" | "es" | "pl";
 
-export interface Copy {
+export interface Stele {
   home: {
     greeting: (a: { name: string | number }) => string;
     nearby: (a: { count: number; radius: string | number }) => string;
@@ -102,7 +102,7 @@ const DATA: Record<Locale, Record<string, string | Forms>> = {
   }
 };
 
-export function createCopy(locale: Locale): Copy {
+export function createStele(locale: Locale): Stele {
   const D = DATA[locale];
   return {
     home: {

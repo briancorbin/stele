@@ -73,6 +73,40 @@ impl Case {
     }
 }
 
+/// The brand name the generated API is built around. `stele` (the default)
+/// yields the type `Stele`, the factory `createStele`, and the React bindings
+/// `useStele` / `SteleProvider`. Set `binding = "copy"` for the classic
+/// `Copy` / `createCopy` / `useCopy` names. One word in `stele.toml` renames the
+/// whole emitted surface, uniformly across every target.
+#[derive(Clone)]
+pub struct Binding {
+    /// PascalCase type name (e.g. `Stele`).
+    pub ty: String,
+    /// lowerCamelCase value name (e.g. `stele`) — the React context field.
+    pub field: String,
+}
+
+impl Binding {
+    pub fn new(raw: &str) -> Binding {
+        Binding {
+            ty: raw.to_upper_camel_case(),
+            field: raw.to_lower_camel_case(),
+        }
+    }
+    /// Factory function name, e.g. `createStele`.
+    pub fn factory(&self) -> String {
+        format!("create{}", self.ty)
+    }
+    /// React hook name, e.g. `useStele`.
+    pub fn hook(&self) -> String {
+        format!("use{}", self.ty)
+    }
+    /// React provider component name, e.g. `SteleProvider`.
+    pub fn provider(&self) -> String {
+        format!("{}Provider", self.ty)
+    }
+}
+
 /// Per-target emitter options, threaded from `stele.toml`.
 #[derive(Clone)]
 pub struct EmitOptions {
@@ -81,6 +115,8 @@ pub struct EmitOptions {
     pub core: String,
     /// Output identifier case.
     pub case: Case,
+    /// The brand name the generated API is built around.
+    pub binding: Binding,
 }
 
 pub fn emitter_for(lang: &str, opts: &EmitOptions) -> Option<Box<dyn Emitter>> {
@@ -88,10 +124,15 @@ pub fn emitter_for(lang: &str, opts: &EmitOptions) -> Option<Box<dyn Emitter>> {
         "typescript" | "ts" => Some(Box::new(ts::TsEmitter {
             callable: opts.callable,
             case: opts.case,
+            binding: opts.binding.clone(),
         })),
-        "swift" => Some(Box::new(swift::SwiftEmitter { case: opts.case })),
+        "swift" => Some(Box::new(swift::SwiftEmitter {
+            case: opts.case,
+            binding: opts.binding.clone(),
+        })),
         "react" => Some(Box::new(react::ReactEmitter {
             core: opts.core.clone(),
+            binding: opts.binding.clone(),
         })),
         _ => None,
     }
