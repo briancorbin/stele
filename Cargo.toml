@@ -16,6 +16,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+csv = "1"
 heck = "0.5"
 icu_locale_core = "2"
 icu_plurals = "2"

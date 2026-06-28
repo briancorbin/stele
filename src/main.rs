@@ -1,6 +1,7 @@
 mod check;
 mod config;
 mod emit;
+mod exchange;
 mod ir;
 mod model;
 mod plural;
@@ -39,6 +40,35 @@ enum Cmd {
         #[arg(long)]
         strict: bool,
     },
+    /// Export a locale to a translator-friendly file (CSV or XLIFF).
+    Export {
+        /// Target locale to translate into (e.g. `es`).
+        #[arg(long)]
+        locale: String,
+        #[arg(long, default_value = "csv")]
+        format: String,
+        /// Output path (default: `<locale>.<csv|xliff>`).
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Only export entries the target locale hasn't translated yet.
+        #[arg(long)]
+        missing: bool,
+        #[arg(long, default_value = "stele.toml")]
+        config: PathBuf,
+    },
+    /// Import a completed translation file back into the JSON catalog.
+    Import {
+        /// The CSV or XLIFF file to import.
+        file: PathBuf,
+        /// Override the target locale (default: from the file).
+        #[arg(long)]
+        locale: Option<String>,
+        /// Force a format (default: inferred from the file extension).
+        #[arg(long)]
+        format: Option<String>,
+        #[arg(long, default_value = "stele.toml")]
+        config: PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
@@ -46,6 +76,19 @@ fn main() -> Result<()> {
         Cmd::Generate { config } => cmd_generate(config),
         Cmd::Ir { locales, canonical } => cmd_ir(locales, canonical),
         Cmd::Check { config, strict } => cmd_check(config, strict),
+        Cmd::Export {
+            locale,
+            format,
+            out,
+            missing,
+            config,
+        } => cmd_export(config, locale, format, out, missing),
+        Cmd::Import {
+            file,
+            locale,
+            format,
+            config,
+        } => cmd_import(config, file, locale, format),
     }
 }
 
@@ -178,5 +221,136 @@ fn cmd_check(config_path: PathBuf, strict: bool) -> Result<()> {
     } else {
         println!("\u{2713} all locales complete and consistent");
     }
+    Ok(())
+}
+
+fn load_config(config_path: &Path) -> Result<(config::Config, PathBuf)> {
+    let text = std::fs::read_to_string(config_path)
+        .with_context(|| format!("reading {}", config_path.display()))?;
+    let cfg: config::Config = toml::from_str(&text)?;
+    let base = config_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf();
+    Ok((cfg, base))
+}
+
+fn cmd_export(
+    config_path: PathBuf,
+    locale: String,
+    format: String,
+    out: Option<PathBuf>,
+    missing: bool,
+) -> Result<()> {
+    let fmt = exchange::parse_format(&format)?;
+    let (cfg, base) = load_config(&config_path)?;
+    if locale == cfg.canonical {
+        return Err(anyhow!(
+            "export target '{locale}' is the canonical locale — choose a locale to translate into"
+        ));
+    }
+    let locales = model::load_locales(&base.join(&cfg.locales))?;
+    let canonical = locales
+        .get(&cfg.canonical)
+        .ok_or_else(|| anyhow!("canonical locale '{}' not found", cfg.canonical))?;
+
+    let mut units = exchange::export_units(canonical, locales.get(&locale), &locale)?;
+    if missing {
+        units.retain(|u| u.target.is_empty());
+    }
+    let total = units.len();
+
+    let ext = if fmt == "csv" { "csv" } else { "xliff" };
+    let out = out.unwrap_or_else(|| PathBuf::from(format!("{locale}.{ext}")));
+    let rendered = match fmt {
+        "csv" => exchange::to_csv(&cfg.canonical, &locale, &units)?,
+        _ => exchange::to_xliff(&cfg.canonical, &locale, &units),
+    };
+    std::fs::write(&out, rendered)?;
+    println!(
+        "\u{2713} exported {total} {} \u{2192} {} ({fmt})",
+        if missing {
+            "untranslated entries"
+        } else {
+            "entries"
+        },
+        out.display()
+    );
+    Ok(())
+}
+
+fn cmd_import(
+    config_path: PathBuf,
+    file: PathBuf,
+    locale: Option<String>,
+    format: Option<String>,
+) -> Result<()> {
+    let (cfg, base) = load_config(&config_path)?;
+    let text =
+        std::fs::read_to_string(&file).with_context(|| format!("reading {}", file.display()))?;
+
+    let fmt = match format {
+        Some(f) => exchange::parse_format(&f)?,
+        None => match file.extension().and_then(|e| e.to_str()) {
+            Some("csv") => "csv",
+            Some("xliff") | Some("xlf") => "xliff",
+            _ => {
+                return Err(anyhow!(
+                    "can't infer format from '{}'; pass --format",
+                    file.display()
+                ))
+            }
+        },
+    };
+
+    let (file_locale, units) = match fmt {
+        "csv" => exchange::from_csv(&text)?,
+        _ => exchange::from_xliff(&text)?,
+    };
+    let target = locale.unwrap_or(file_locale);
+    if target.is_empty() {
+        return Err(anyhow!("no target locale in the file; pass --locale"));
+    }
+    if target == cfg.canonical {
+        return Err(anyhow!(
+            "refusing to import over the canonical locale '{target}'"
+        ));
+    }
+
+    let locales_dir = base.join(&cfg.locales);
+    if locales_dir.join(&target).is_dir() {
+        return Err(anyhow!(
+            "locale '{target}' is a folder ({}/) — import currently writes a single {target}.json; not yet supported for folder locales",
+            target
+        ));
+    }
+
+    // Structure comes from the canonical catalog; only strings come from the file.
+    let all = model::load_locales(&locales_dir)?;
+    let canonical = all
+        .get(&cfg.canonical)
+        .ok_or_else(|| anyhow!("canonical locale '{}' not found", cfg.canonical))?;
+    let paths = exchange::build_paths(canonical, &units);
+    let written = paths.len();
+
+    // Merge onto the existing target file (leaf-level replace), preserving any
+    // translations not present in this import.
+    let target_file = locales_dir.join(format!("{target}.json"));
+    let mut root = if target_file.exists() {
+        serde_json::from_str(&std::fs::read_to_string(&target_file)?)?
+    } else {
+        serde_json::Value::Object(serde_json::Map::new())
+    };
+    for (path, value) in paths {
+        exchange::set_path(&mut root, &path, value);
+    }
+    std::fs::write(
+        &target_file,
+        format!("{}\n", serde_json::to_string_pretty(&root)?),
+    )?;
+    println!(
+        "\u{2713} imported {written} entries \u{2192} {} (run `stele check` to verify)",
+        target_file.display()
+    );
     Ok(())
 }

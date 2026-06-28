@@ -391,6 +391,34 @@ language-independent, so all locales must handle it).
 Keep `$select` for *language* branching — gender, formality (tú/usted). UI state
 (`isBusy ? … : …`) belongs in your code, not the catalog.
 
+### Translator workflow — `export` / `import`
+
+JSON is friendlier than code, but professional translators don't hand-edit JSON
+either — they use spreadsheets or TMS/CAT tools that speak **CSV** and **XLIFF**.
+So Stele round-trips through both, keeping the JSON catalog as the source of truth:
+
+```bash
+stele export --locale es --format csv    --missing   # only what's untranslated
+stele export --locale es --format xliff              # for a TMS / CAT tool
+# … translator fills in the target column / <target> …
+stele import es.csv                                   # writes locales/es.json
+stele check                                           # confirm it's complete
+```
+
+Two things make this robust:
+
+- **Plural slots are per-locale.** Exporting Polish gives `few`/`many` rows English
+  never had; exporting Arabic gives all six categories — each from the target's CLDR
+  rules, so the translator can't under-translate a plural.
+- **Import can't reshape your catalog.** Structure (which keys are `$plural`, a
+  `$select`'s `param`) comes from the *canonical* catalog; only the strings come
+  from the translation file. A translator literally cannot rename a param or drop a
+  plural form — at worst a string is missing, and `stele check` catches that.
+
+Placeholders travel as literal `{{name}}` text (translators preserve them). Import
+writes a single `locales/<loc>.json`, merging at the leaf level (folder-split
+locales aren't supported for import yet).
+
 ## Status
 
 Early, but real. Both emitters are verified end-to-end: the generated code compiles, runs, and rejects bad calls at compile time.
@@ -424,6 +452,8 @@ Early, but real. Both emitters are verified end-to-end: the generated code compi
       drift, plural-category coverage, kind mismatches); non-zero exit for CI
 - [x] `$select` — linguistic branching (gender / formality) as a literal-union
       param; cross-locale case consistency enforced by `stele check`
+- [x] Translator round-trip (`stele export` / `import`) — CSV + XLIFF 1.2,
+      per-locale plural slots, structure-locked import; JSON stays canonical
 - [ ] More emitters (Kotlin, Go, Rust, Java)
 
 ## License
