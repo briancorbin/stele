@@ -416,8 +416,10 @@ Two things make this robust:
   plural form — at worst a string is missing, and `stele check` catches that.
 
 Placeholders travel as literal `{{name}}` text (translators preserve them). Import
-writes a single `locales/<loc>.json`, merging at the leaf level (folder-split
-locales aren't supported for import yet).
+**mirrors the canonical locale's on-disk layout** — a single `locales/<loc>.json`,
+or, for a folder-split catalog (`locales/en/walker/today.json`), each key routed
+into the matching target file (`locales/<loc>/walker/today.json`) — merging at the
+leaf level so existing translations are preserved.
 
 ## Status
 
@@ -453,7 +455,8 @@ Early, but real. Both emitters are verified end-to-end: the generated code compi
 - [x] `$select` — linguistic branching (gender / formality) as a literal-union
       param; cross-locale case consistency enforced by `stele check`
 - [x] Translator round-trip (`stele export` / `import`) — CSV + XLIFF 1.2,
-      per-locale plural slots, structure-locked import; JSON stays canonical
+      per-locale plural slots, structure-locked import that mirrors single-file
+      or folder-split layout; JSON stays canonical
 - [ ] More emitters (Kotlin, Go, Rust, Java)
 
 ## License

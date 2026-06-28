@@ -318,12 +318,6 @@ fn cmd_import(
     }
 
     let locales_dir = base.join(&cfg.locales);
-    if locales_dir.join(&target).is_dir() {
-        return Err(anyhow!(
-            "locale '{target}' is a folder ({}/) — import currently writes a single {target}.json; not yet supported for folder locales",
-            target
-        ));
-    }
 
     // Structure comes from the canonical catalog; only strings come from the file.
     let all = model::load_locales(&locales_dir)?;
@@ -331,26 +325,86 @@ fn cmd_import(
         .get(&cfg.canonical)
         .ok_or_else(|| anyhow!("canonical locale '{}' not found", cfg.canonical))?;
     let paths = exchange::build_paths(canonical, &units);
-    let written = paths.len();
 
-    // Merge onto the existing target file (leaf-level replace), preserving any
-    // translations not present in this import.
-    let target_file = locales_dir.join(format!("{target}.json"));
-    let mut root = if target_file.exists() {
-        serde_json::from_str(&std::fs::read_to_string(&target_file)?)?
-    } else {
-        serde_json::Value::Object(serde_json::Map::new())
-    };
-    for (path, value) in paths {
-        exchange::set_path(&mut root, &path, value);
-    }
-    std::fs::write(
-        &target_file,
-        format!("{}\n", serde_json::to_string_pretty(&root)?),
-    )?;
+    // Mirror the canonical locale's on-disk layout for the target.
+    let layout = model::locale_layout(&locales_dir, &cfg.canonical)?
+        .ok_or_else(|| anyhow!("canonical locale '{}' not found", cfg.canonical))?;
+    let written = write_import(&locales_dir, &target, layout, paths)?;
+
     println!(
-        "\u{2713} imported {written} entries \u{2192} {} (run `stele check` to verify)",
-        target_file.display()
+        "\u{2713} imported {written} entries into locale '{target}' (run `stele check` to verify)"
     );
     Ok(())
+}
+
+/// Write the translated `(path, value)` leaves into the target locale, matching
+/// the canonical layout: a single `<target>.json`, or — for a folder catalog —
+/// each leaf routed into the target file mirroring the canonical file that owns
+/// it (longest mount-prefix match). Existing files are merged at the leaf level.
+fn write_import(
+    locales_dir: &Path,
+    target: &str,
+    layout: model::Layout,
+    paths: Vec<(Vec<String>, serde_json::Value)>,
+) -> Result<usize> {
+    use serde_json::{Map, Value};
+    let load_or_empty = |p: &Path| -> Result<Value> {
+        if p.exists() {
+            Ok(serde_json::from_str(&std::fs::read_to_string(p)?)?)
+        } else {
+            Ok(Value::Object(Map::new()))
+        }
+    };
+    let written = paths.len();
+
+    match layout {
+        model::Layout::Single => {
+            let file = locales_dir.join(format!("{target}.json"));
+            let mut root = load_or_empty(&file)?;
+            for (path, value) in paths {
+                exchange::set_path(&mut root, &path, value);
+            }
+            std::fs::write(&file, format!("{}\n", serde_json::to_string_pretty(&root)?))?;
+        }
+        model::Layout::Folder { files } => {
+            // Group each leaf under the canonical file whose mount is the longest
+            // prefix of its path; write into the mirrored target file.
+            let mut per_file: std::collections::BTreeMap<PathBuf, Vec<(Vec<String>, Value)>> =
+                std::collections::BTreeMap::new();
+            for (path, value) in paths {
+                let owner = files
+                    .iter()
+                    .filter(|f| f.mount.len() <= path.len() && path[..f.mount.len()] == f.mount[..])
+                    .max_by_key(|f| f.mount.len());
+                let Some(owner) = owner else {
+                    eprintln!(
+                        "warning: no canonical file owns '{}' — skipping",
+                        path.join(".")
+                    );
+                    continue;
+                };
+                let within = path[owner.mount.len()..].to_vec();
+                per_file
+                    .entry(owner.rel.clone())
+                    .or_default()
+                    .push((within, value));
+            }
+            for (rel, entries) in per_file {
+                let file = locales_dir.join(target).join(&rel);
+                let mut root = load_or_empty(&file)?;
+                for (within, value) in entries {
+                    if within.is_empty() {
+                        root = value; // the whole file is a single leaf
+                    } else {
+                        exchange::set_path(&mut root, &within, value);
+                    }
+                }
+                if let Some(parent) = file.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                std::fs::write(&file, format!("{}\n", serde_json::to_string_pretty(&root)?))?;
+            }
+        }
+    }
+    Ok(written)
 }

@@ -3,7 +3,7 @@ use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use std::fmt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Load locales from `dir`. Two layouts are supported and may be mixed:
 ///   - `dir/<locale>.json` — the whole locale in one file.
@@ -207,6 +207,69 @@ fn deep_merge(into: &mut Value, from: Value) -> Result<()> {
     }
 }
 
+/// How a locale is stored on disk — used by `stele import` to write a target
+/// locale the same way the canonical one is laid out.
+pub enum Layout {
+    /// One file: `dir/<locale>.json`.
+    Single,
+    /// A folder of files: `dir/<locale>/**/*.json`. Each file `mount`s at a
+    /// namespace path (folder names + file stem) and `rel` is its path under the
+    /// locale folder (e.g. mount `["walker","today"]`, rel `walker/today.json`).
+    Folder { files: Vec<FolderFile> },
+}
+
+pub struct FolderFile {
+    pub mount: Vec<String>,
+    pub rel: PathBuf,
+}
+
+/// Determine how `locale` is laid out under `dir` (folder preferred if both
+/// exist), or `None` if it doesn't exist yet.
+pub fn locale_layout(dir: &Path, locale: &str) -> Result<Option<Layout>> {
+    let folder = dir.join(locale);
+    if folder.is_dir() {
+        let mut files = Vec::new();
+        collect_files(&folder, &mut Vec::new(), Path::new(""), &mut files)?;
+        return Ok(Some(Layout::Folder { files }));
+    }
+    if dir.join(format!("{locale}.json")).exists() {
+        return Ok(Some(Layout::Single));
+    }
+    Ok(None)
+}
+
+fn collect_files(
+    dir: &Path,
+    mount: &mut Vec<String>,
+    rel: &Path,
+    out: &mut Vec<FolderFile>,
+) -> Result<()> {
+    let mut entries: Vec<_> =
+        std::fs::read_dir(dir)?.collect::<std::result::Result<Vec<_>, _>>()?;
+    entries.sort_by_key(|e| e.path());
+    for entry in entries {
+        let path = entry.path();
+        let nm = name_of(&path);
+        if path.is_dir() {
+            mount.push(nm.clone());
+            collect_files(&path, mount, &rel.join(&nm), out)?;
+            mount.pop();
+        } else if path.extension().and_then(|e| e.to_str()) == Some("json") {
+            let stem = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+            mount.push(stem);
+            out.push(FolderFile {
+                mount: mount.clone(),
+                rel: rel.join(&nm),
+            });
+            mount.pop();
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -248,5 +311,36 @@ mod tests {
     fn deep_merge_rejects_collisions() {
         let mut a = json!({ "x": "one" });
         assert!(deep_merge(&mut a, json!({ "x": "two" })).is_err());
+    }
+
+    #[test]
+    fn folder_layout_records_file_mounts() {
+        let base = std::env::temp_dir().join(format!("stele_layout_{}", std::process::id()));
+        std::fs::create_dir_all(base.join("en/walker")).unwrap();
+        std::fs::write(base.join("en/nav.json"), "{}").unwrap();
+        std::fs::write(base.join("en/walker/today.json"), "{}").unwrap();
+
+        let layout = locale_layout(&base, "en").unwrap().unwrap();
+        let Layout::Folder { files } = layout else {
+            panic!("expected a folder layout");
+        };
+        let got: Vec<_> = files
+            .iter()
+            .map(|f| (f.mount.clone(), f.rel.to_string_lossy().replace('\\', "/")))
+            .collect();
+        assert!(got.contains(&(vec!["nav".to_string()], "nav.json".to_string())));
+        assert!(got.contains(&(
+            vec!["walker".to_string(), "today".to_string()],
+            "walker/today.json".to_string()
+        )));
+
+        // a single-file locale is detected as Single
+        std::fs::write(base.join("es.json"), "{}").unwrap();
+        assert!(matches!(
+            locale_layout(&base, "es").unwrap().unwrap(),
+            Layout::Single
+        ));
+
+        std::fs::remove_dir_all(&base).ok();
     }
 }
